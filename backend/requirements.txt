@@ -6,7 +6,20 @@ pydantic==2.9.2
 pydantic-settings==2.5.2
 python-multipart==0.0.9
 openai==1.51.0
-pytesseract==0.3.13
+# OCR: PaddleOCR (local, free, CPU, no API key) replaces the earlier pytesseract adapter.
+# paddleocr==2.7.3 is pinned deliberately over newer 2.9.x/3.x releases: 2.9.x's bundled
+# formula/table-recognition augmentation path (ppocr.data.imaug.latex_ocr_aug) unconditionally
+# imports albumentations -> albucore -> torch, dragging in a ~1GB+ unrelated GPU-adjacent stack
+# and (on this Windows/Python 3.10 combo) a broken torch DLL load - none of that is needed for
+# plain text-region OCR. 2.7.3 has no such import and installs clean on Windows CPU.
+paddleocr==2.7.3
+# NOTE: paddleocr's own install_requires lists opencv-python/opencv-contrib-python, which would
+# otherwise reinstall a non-headless cv2 on top of (or fail outright against, if a process has
+# cv2 already loaded - e.g. a running dev server) opencv-python-headless above. On a fresh venv
+# this just means `pip install -r requirements.txt` ends up with both cv2 variants installed;
+# to avoid that, install paddleocr separately: `pip install --no-deps paddleocr==2.7.3 &&
+# pip install pyclipper imgaug lmdb requests` (see README "OCR vs. AI Vision Interpretation").
+paddlepaddle==2.6.2
 opencv-python-headless==4.10.0.84
 Pillow==10.4.0
 pandas==2.2.3

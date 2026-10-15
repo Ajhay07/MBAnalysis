@@ -129,11 +129,12 @@ def test_malformed_ai_json_response_fails_cleanly(db, monkeypatch):
 
 
 def test_ocr_unavailable_does_not_crash_pipeline_and_does_not_fabricate_success(db, monkeypatch):
-    """Tesseract missing is a graceful degradation (vision analysis still runs), not a hard
-    failure - document that explicitly: the pipeline must still reach a real terminal stage
-    (not get stuck), and components are still genuinely derived from the provider, not faked."""
+    """PaddleOCR missing/unavailable is a graceful degradation (vision analysis still runs), not
+    a hard failure - document that explicitly: the pipeline must still reach a real terminal
+    stage (not get stuck), and components are still genuinely derived from the provider, not
+    faked."""
     drawing = _make_drawing(db, "no_ocr.png")
-    monkeypatch.setattr("app.services.ocr.is_tesseract_available", lambda: False)
+    monkeypatch.setattr("app.services.paddle_ocr._get_engine", lambda: None)
 
     analysis = run_analysis(db, drawing)
     job = _latest_job(db, drawing.id)

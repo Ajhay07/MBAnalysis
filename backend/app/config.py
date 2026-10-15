@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
 
+    # --- OCR (PaddleOCR: local, free, no API key - distinct from AI vision interpretation) ---
+    OCR_ENABLED: bool = True
+    OCR_LANGUAGE: str = "en"
+    OCR_USE_GPU: bool = False
+    PDF_RENDER_DPI: int = 288
+    OCR_CONFIDENCE_THRESHOLD: float = 0.5
+    # Deskew defaults off: the minAreaRect-based angle estimate is unreliable on sparse/
+    # high-aspect-ratio text layouts (verified empirically - it can rotate otherwise-straight
+    # text and hurt recognition). Turn it on for genuinely skewed scans via config.
+    OCR_PREPROCESS_DESKEW: bool = False
+    OCR_PREPROCESS_CLAHE: bool = True
+    OCR_PREPROCESS_DENOISE: bool = False
+
     @property
     def allowed_extensions_list(self) -> list[str]:
         return [e.strip().lower() for e in self.ALLOWED_EXTENSIONS.split(",") if e.strip()]

@@ -48,12 +48,73 @@ AI provider's output accuracy against a sample of your own real drawings.
 
 `app/providers/__init__.py: get_provider()` is the single place that decides which one to use.
 
-### OCR
-`app/services/ocr.py` wraps `pytesseract` + OpenCV preprocessing (CLAHE contrast boost, deskew
-via minimum-area-rect, upscaling for small images — real working logic, not stubs). If the
-Tesseract binary isn't installed, `is_tesseract_available()` returns `False` and OCR is skipped
-gracefully (empty text, explanatory message) rather than crashing the app. **Windows install:**
-https://github.com/UB-Mannheim/tesseract/wiki — install, then ensure `tesseract.exe` is on PATH.
+### OCR vs. AI Vision Interpretation — these are two distinct stages
+
+**OCR text extraction** (`app/services/paddle_ocr.py`) and **AI visual interpretation**
+(`app/providers/*`) are deliberately separate concerns, never conflated:
+
+| | OCR (this phase) | AI vision interpretation |
+|---|---|---|
+| What it does | Extracts raw text + bounding boxes from pixels | Identifies components, quantities, dimensions, materials |
+| Engine | PaddleOCR — local, CPU, free | OpenAI vision model, or the Demo provider |
+| Needs an API key? | **No, never** | Only `OpenAIVisionProvider`; Demo provider needs none |
+| Job stage | `JobStage.OCR` | `JobStage.VISION_ANALYSIS` |
+| Can succeed alone? | Yes — a drawing can reach "OCR completed" with **zero** AI-identified components if no AI provider is configured | No — it consumes OCR's text as additional context, but invents nothing not actually read |
+
+A drawing never gets fabricated components/dimensions from the OCR layer — OCR only ever
+produces text + confidence + bounding boxes; interpreting that into BOM line items is entirely
+the provider's job (real OpenAI vision call, or clearly-labeled `[DEMO]` synthetic data).
+
+**OCR engine: PaddleOCR** (`app/services/paddle_ocr.py`)
+- Pinned to `paddleocr==2.7.3` + `paddlepaddle==2.6.2` (CPU-only, no GPU package). Newer
+  `paddleocr==2.9.x`/`3.x` were evaluated and rejected: their bundled formula/table-recognition
+  augmentation path unconditionally imports `albumentations -> albucore -> torch`, pulling in a
+  multi-hundred-MB unrelated GPU-adjacent stack (and, on this Windows/Python 3.10 combination,
+  a broken `torch` DLL load) for plain text-region OCR that never needs it. 2.7.3 has no such
+  import and installs clean.
+- The `PaddleOCR` engine object is an expensive singleton — constructed once (lazily, on first
+  real use) and reused for every page/request, never rebuilt per call.
+- Uses the `.ocr(image, cls=True)` API (2.x result shape: a list of
+  `[bbox, (text, confidence)]` lines per page). Returns a structured `PageOcrResult` per page:
+  recognized text regions (text + confidence 0-1 + 4-point bounding box), page number, and any
+  warnings/errors — never raises; engine failures, empty results, and malformed images all
+  degrade to a structured error instead of crashing the pipeline.
+- Low-confidence regions (below `OCR_CONFIDENCE_THRESHOLD`, default 0.5) are flagged in
+  `warnings`, not silently accepted — they still flow through to the existing
+  confidence/verification-status fields on `Component`/`Analysis` for manual review.
+- **Preprocessing** (`preprocess_image`, reusing the proven CLAHE/deskew approach from the prior
+  pytesseract-era adapter) is configurable per step: `OCR_PREPROCESS_CLAHE` (contrast, default
+  on), `OCR_PREPROCESS_DESKEW` (default **off** — verified empirically that the
+  minimum-area-rect angle estimate is unreliable on sparse/high-aspect text and can rotate
+  otherwise-straight text into worse recognition; turn it on for genuinely skewed scans),
+  `OCR_PREPROCESS_DENOISE` (default off — thresholding/denoising is never applied
+  unconditionally, since it destroys thin dimension lines and decimal points).
+- **Model download**: PaddleOCR downloads its detection/recognition/classification model
+  weights to `~/.paddleocr` on first real use (a few MB, one-time, requires network access).
+  After that, every OCR call runs fully offline/locally — no paid API, no network call.
+- Config (see `.env.example`): `OCR_ENABLED` (default true), `OCR_LANGUAGE` (default `en`),
+  `OCR_USE_GPU` (default false — CPU only, no GPU packages installed), `PDF_RENDER_DPI`
+  (default 288, feeds `rasterize_pdf_pages`'s zoom factor), `OCR_CONFIDENCE_THRESHOLD`
+  (default 0.5).
+- **Windows install note**: `paddlepaddle` installs cleanly from plain PyPI on Windows/CPU/
+  Python 3.10 (`pip install paddlepaddle==2.6.2`) — no special index needed. `paddleocr==2.7.3`
+  declares `opencv-python`/`opencv-contrib-python` as dependencies, which conflict with this
+  project's `opencv-python-headless` pin (both ship a `cv2` binary extension, and reinstalling
+  it over a running `cv2` import — e.g. a live `uvicorn` dev server — fails on Windows with
+  `OSError: [WinError 5] Access is denied: ...cv2.pyd`). Install it with `--no-deps`, then add
+  only the submodules actually needed for inference (`pip install --no-deps paddleocr==2.7.3 &&
+  pip install pyclipper imgaug lmdb requests` is sufficient in practice — no `opencv-python`,
+  no `torch`). See `backend/requirements.txt` for the exact pinned versions.
+- **Known limitations** (be honest about these): PaddleOCR's general-purpose PP-OCRv3/v4
+  models are trained on natural/document text, not dense technical drawings — expect lower
+  accuracy on tightly-packed dimension callouts, GD&T symbols, and rotated/vertical text than on
+  a clean title block. DPI tuning (`PDF_RENDER_DPI`) matters a lot in practice; 288 is a
+  reasonable default but very dense drawings may need higher. Always treat OCR output as
+  evidence for the AI vision step and for manual review, not as a verified ground truth.
+
+**Old adapter removed**: the earlier `pytesseract`-based `app/services/ocr.py` has been deleted
+and replaced entirely by the above. `pytesseract` and the Tesseract binary are no longer a
+dependency of this project.
 
 ### Background jobs (Phase 13 — done)
 Every analysis run is tracked by a `Job` row written synchronously around the pipeline — no
@@ -103,6 +164,11 @@ cd backend
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+# paddleocr's declared opencv-python(-contrib) deps conflict with this project's
+# opencv-python-headless pin (see "OCR vs. AI Vision Interpretation" above) - install it
+# separately with --no-deps, then its few genuinely-needed submodules:
+pip install --no-deps paddleocr==2.7.3
+pip install pyclipper imgaug lmdb requests
 copy .env.example .env
 python generate_seed_assets.py      # generates seed_assets/*.svg sample drawings
 python seed.py                      # seeds 3 demo projects into the DB

@@ -23,12 +23,12 @@ from app.providers import get_provider
 from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
 from app.schemas.analysis import AnalysisResult
 from app.services.classification import classify_component
-from app.services.ocr import run_ocr
+from app.services.paddle_ocr import run_page_ocr
 
-# Target raster resolution for PDF pages: PyMuPDF's default is 72 DPI (zoom 1.0). A zoom of
-# ~2.5-4.0 lands in the 180-290 DPI range, which is what both OCR and vision models need to
-# read small title-block text reliably.
-PDF_RASTER_ZOOM = 3.0
+def _pdf_raster_zoom() -> float:
+    """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 288) is what
+    both OCR and vision models need to read small title-block text reliably."""
+    return get_settings().PDF_RENDER_DPI / 72.0
 
 
 class PdfProcessingError(Exception):
@@ -84,7 +84,8 @@ def rasterize_pdf_pages(path: str, drawing: Drawing) -> list[tuple[int, np.ndarr
             raise PdfProcessingError("PDF has no pages.")
 
         pages: list[tuple[int, np.ndarray | None, str]] = []
-        matrix = fitz.Matrix(PDF_RASTER_ZOOM, PDF_RASTER_ZOOM)
+        zoom = _pdf_raster_zoom()
+        matrix = fitz.Matrix(zoom, zoom)
         for i in range(page_count):
             page = doc.load_page(i)
             page_number = i + 1
@@ -203,13 +204,14 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
                 ocr_text = embedded_text
                 job.stage = JobStage.OCR
                 db.commit()
+                page_ocr = None
                 if image is not None:
-                    ocr_result = run_ocr(image)
+                    page_ocr = run_page_ocr(image, page_number=page_number)
                     # Scanned pages have no embedded text; OCR output fills the gap. When both
-                    # exist, keep the embedded text (more accurate) but still run OCR so nothing
-                    # is skipped, and append anything OCR found that the text layer didn't.
-                    if ocr_result.text and ocr_result.text.strip() not in (embedded_text or ""):
-                        ocr_text = (embedded_text + "\n" + ocr_result.text).strip() if embedded_text else ocr_result.text
+                    # exist, keep both available as context rather than forcibly deduplicating -
+                    # just skip a literal exact-duplicate append.
+                    if page_ocr.text and page_ocr.text.strip() not in (embedded_text or ""):
+                        ocr_text = (embedded_text + "\n" + page_ocr.text).strip() if embedded_text else page_ocr.text
 
                 job.stage = JobStage.VISION_ANALYSIS
                 db.commit()
@@ -241,8 +243,8 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
             job.stage = JobStage.OCR
             db.commit()
             if image is not None:
-                ocr_result = run_ocr(image)
-                ocr_text = ocr_result.text
+                page_ocr = run_page_ocr(image, page_number=1)
+                ocr_text = page_ocr.text
 
             job.stage = JobStage.VISION_ANALYSIS
             db.commit()
