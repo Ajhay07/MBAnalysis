@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Analysis, Bom, BomLineItem, Drawing, DrawingStatus, AuditLog
 
 
-def generate_bom_from_analysis(db: Session, analysis: Analysis) -> Bom:
+def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "system") -> Bom:
     """Builds a new BOM (versioned) from a persisted analysis's components.
     Flat with parent_line_item_id preserved for future multi-level UI."""
     existing_count = db.query(Bom).filter(Bom.analysis_id == analysis.id).count()
@@ -43,7 +43,8 @@ def generate_bom_from_analysis(db: Session, analysis: Analysis) -> Bom:
         drawing.status = DrawingStatus.BOM_GENERATED
 
     db.add(AuditLog(entity_type="bom", entity_id=bom.id, action="generated",
-                     details={"analysis_id": analysis.id, "line_count": len(analysis.components)}))
+                     details={"analysis_id": analysis.id, "line_count": len(analysis.components)},
+                     actor=actor))
     db.commit()
     db.refresh(bom)
     return bom

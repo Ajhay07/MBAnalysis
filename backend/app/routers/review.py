@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
-from app.models.models import Component, Analysis, Drawing, AuditLog
+from app.models.models import Component, Analysis, Drawing, AuditLog, User
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -12,7 +13,7 @@ CONFIDENCE_THRESHOLD = 0.6
 
 
 @router.get("/queue")
-def review_queue(db: Session = Depends(get_db)):
+def review_queue(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     rows = (
         db.query(Component, Analysis, Drawing)
         .join(Analysis, Component.analysis_id == Analysis.id)
@@ -35,7 +36,7 @@ def review_queue(db: Session = Depends(get_db)):
 
 @router.get("/audit-trail")
 def audit_trail(entity_type: str | None = None, entity_id: str | None = None,
-                 db: Session = Depends(get_db)):
+                 db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(AuditLog)
     if entity_type:
         query = query.filter(AuditLog.entity_type == entity_type)

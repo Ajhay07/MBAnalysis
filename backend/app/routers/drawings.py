@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, B
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_role
 from app.config import get_settings
 from app.database import get_db
-from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog
+from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User
 from app.schemas.api import DrawingOut, AnalysisOut
 from app.services.analysis_pipeline import run_analysis, drawing_abspath
 from app.services.file_validation import (
@@ -18,6 +19,8 @@ from app.services.file_validation import (
 
 router = APIRouter(prefix="/api/drawings", tags=["drawings"])
 
+editor = require_role("admin", "engineer")
+
 
 @router.post("", response_model=DrawingOut)
 async def upload_drawing(
@@ -26,6 +29,7 @@ async def upload_drawing(
     title: str = Form(""),
     revision: str = Form("A"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(editor),
 ):
     settings = get_settings()
     try:
@@ -53,7 +57,8 @@ async def upload_drawing(
     )
     db.add(drawing)
     db.add(AuditLog(entity_type="drawing", entity_id=drawing.id if drawing.id else "pending",
-                     action="uploaded", details={"file_name": file.filename}))
+                     action="uploaded", details={"file_name": file.filename},
+                     actor=current_user.email))
     db.commit()
     db.refresh(drawing)
     return drawing
@@ -67,6 +72,7 @@ def list_drawings(
     page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(Drawing)
     if q:
@@ -86,7 +92,8 @@ def list_drawings(
 
 
 @router.get("/{drawing_id}", response_model=DrawingOut)
-def get_drawing(drawing_id: str, db: Session = Depends(get_db)):
+def get_drawing(drawing_id: str, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
     drawing = db.query(Drawing).get(drawing_id)
     if not drawing:
         raise HTTPException(404, "Drawing not found")
@@ -94,7 +101,8 @@ def get_drawing(drawing_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{drawing_id}/file")
-def get_drawing_file(drawing_id: str, db: Session = Depends(get_db)):
+def get_drawing_file(drawing_id: str, db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
     drawing = db.query(Drawing).get(drawing_id)
     if not drawing:
         raise HTTPException(404, "Drawing not found")
@@ -105,13 +113,15 @@ def get_drawing_file(drawing_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{drawing_id}")
-def delete_drawing(drawing_id: str, db: Session = Depends(get_db)):
+def delete_drawing(drawing_id: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(editor)):
     drawing = db.query(Drawing).get(drawing_id)
     if not drawing:
         raise HTTPException(404, "Drawing not found")
     path = drawing_abspath(drawing)
     db.delete(drawing)
-    db.add(AuditLog(entity_type="drawing", entity_id=drawing_id, action="deleted", details={}))
+    db.add(AuditLog(entity_type="drawing", entity_id=drawing_id, action="deleted", details={},
+                     actor=current_user.email))
     db.commit()
     if os.path.exists(path):
         try:
@@ -122,17 +132,19 @@ def delete_drawing(drawing_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{drawing_id}/analyze", response_model=AnalysisOut)
-def analyze_drawing(drawing_id: str, db: Session = Depends(get_db)):
+def analyze_drawing(drawing_id: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(editor)):
     drawing = db.query(Drawing).get(drawing_id)
     if not drawing:
         raise HTTPException(404, "Drawing not found")
     drawing.status = DrawingStatus.QUEUED
     db.commit()
-    analysis = run_analysis(db, drawing)
+    analysis = run_analysis(db, drawing, actor=current_user.email)
     return analysis
 
 
 @router.get("/{drawing_id}/analyses", response_model=list[AnalysisOut])
-def list_analyses(drawing_id: str, db: Session = Depends(get_db)):
+def list_analyses(drawing_id: str, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
     return db.query(Analysis).filter(Analysis.drawing_id == drawing_id).order_by(
         Analysis.version.desc()).all()

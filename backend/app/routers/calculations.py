@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.auth import get_current_user
+from app.models.models import User
 from app.services import calculations as calc
 
 router = APIRouter(prefix="/api/calculations", tags=["calculations"])
+
+# These endpoints are pure, non-persisted computations (nothing is written to the database),
+# so they only require being logged in - no role gating. Per the task scope: "calculations-if-
+# persisted" should be gated; these aren't persisted.
 
 
 class GearRatioIn(BaseModel):
@@ -48,36 +54,36 @@ class ConvertIn(BaseModel):
 
 
 @router.post("/gear-ratio")
-def gear_ratio(payload: GearRatioIn):
+def gear_ratio(payload: GearRatioIn, current_user: User = Depends(get_current_user)):
     return calc.gear_ratio(payload.driver_teeth, payload.driven_teeth)
 
 
 @router.post("/gear-module")
-def gear_module(payload: GearModuleIn):
+def gear_module(payload: GearModuleIn, current_user: User = Depends(get_current_user)):
     return calc.gear_module(payload.pitch_diameter, payload.number_of_teeth)
 
 
 @router.post("/cylindrical-volume")
-def cylindrical_volume(payload: CylinderVolumeIn):
+def cylindrical_volume(payload: CylinderVolumeIn, current_user: User = Depends(get_current_user)):
     return calc.cylindrical_volume(payload.diameter, payload.height)
 
 
 @router.post("/rectangular-volume")
-def rectangular_volume(payload: RectVolumeIn):
+def rectangular_volume(payload: RectVolumeIn, current_user: User = Depends(get_current_user)):
     return calc.rectangular_volume(payload.length, payload.width, payload.height)
 
 
 @router.post("/mass")
-def mass(payload: MassIn):
+def mass(payload: MassIn, current_user: User = Depends(get_current_user)):
     return calc.mass_from_volume(payload.volume_mm3, payload.density_g_cm3)
 
 
 @router.post("/raw-stock-volume")
-def raw_stock_volume(payload: RawStockIn):
+def raw_stock_volume(payload: RawStockIn, current_user: User = Depends(get_current_user)):
     return calc.raw_stock_volume(payload.bounding_length, payload.bounding_width,
                                   payload.bounding_height, payload.machining_allowance_mm)
 
 
 @router.post("/convert-length")
-def convert_length(payload: ConvertIn):
+def convert_length(payload: ConvertIn, current_user: User = Depends(get_current_user)):
     return calc.convert_length(payload.value, payload.from_unit, payload.to_unit)

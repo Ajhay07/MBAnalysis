@@ -32,7 +32,7 @@ def _load_image_array(path: str) -> np.ndarray | None:
     return img
 
 
-def run_analysis(db: Session, drawing: Drawing) -> Analysis:
+def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analysis:
     """Full pipeline: OCR -> AI provider (OpenAI vision or demo) -> persist versioned analysis
     with components. Never substitutes seeded demo content for a real drawing - the provider
     is invoked fresh against this drawing's own file every time."""
@@ -95,7 +95,8 @@ def run_analysis(db: Session, drawing: Drawing) -> Analysis:
         drawing.status = DrawingStatus.NEEDS_REVIEW if needs_review else DrawingStatus.REVIEWED
         job.status = "Done"
         db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="analyzed",
-                         details={"provider": result.provider, "analysis_id": analysis.id}))
+                         details={"provider": result.provider, "analysis_id": analysis.id},
+                         actor=actor))
         db.commit()
         db.refresh(analysis)
         return analysis

@@ -81,7 +81,7 @@ PROJECTS = [
 ]
 
 
-def seed_demo_data(db) -> int:
+def seed_demo_data(db, actor: str = "system") -> int:
     settings = get_settings()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
@@ -148,7 +148,8 @@ def seed_demo_data(db) -> int:
                 material=comp.material, make_buy=comp.make_buy,
             ))
 
-        db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="demo_seeded", details={}))
+        db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="demo_seeded", details={},
+                         actor=actor))
         created += 1
 
     db.commit()

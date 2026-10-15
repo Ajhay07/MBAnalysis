@@ -6,9 +6,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import drawings, analyses, boms, procurement, calculations, dashboard, review, demo
+from app.routers import drawings, analyses, boms, procurement, calculations, dashboard, review, demo, auth
+from app.security import get_jwt_secret
 
 settings = get_settings()
+
+# Fail loud here (not on first login) if JWT_SECRET is required but unset - see
+# app/security.py:get_jwt_secret for the development-vs-everything-else policy.
+get_jwt_secret()
 
 # Documented path: run `alembic upgrade head` before starting the app.
 # create_all() below remains only as a dev convenience fallback so a fresh
@@ -27,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(drawings.router)
 app.include_router(analyses.router)
 app.include_router(boms.router)

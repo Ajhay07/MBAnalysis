@@ -7,20 +7,24 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models.models import Supplier, CatalogComponent, BomLineItem, Bom
+from app.models.models import Supplier, CatalogComponent, BomLineItem, Bom, User
 from app.schemas.api import SupplierIn, SupplierOut, CatalogComponentIn, CatalogComponentOut
 
 router = APIRouter(prefix="/api/procurement", tags=["procurement"])
 
+editor = require_role("admin", "engineer")
+
 
 @router.get("/suppliers", response_model=list[SupplierOut])
-def list_suppliers(db: Session = Depends(get_db)):
+def list_suppliers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(Supplier).all()
 
 
 @router.post("/suppliers", response_model=SupplierOut)
-def create_supplier(payload: SupplierIn, db: Session = Depends(get_db)):
+def create_supplier(payload: SupplierIn, db: Session = Depends(get_db),
+                     current_user: User = Depends(editor)):
     supplier = Supplier(**payload.model_dump())
     db.add(supplier)
     db.commit()
@@ -29,7 +33,8 @@ def create_supplier(payload: SupplierIn, db: Session = Depends(get_db)):
 
 
 @router.put("/suppliers/{supplier_id}", response_model=SupplierOut)
-def update_supplier(supplier_id: str, payload: SupplierIn, db: Session = Depends(get_db)):
+def update_supplier(supplier_id: str, payload: SupplierIn, db: Session = Depends(get_db),
+                     current_user: User = Depends(editor)):
     supplier = db.query(Supplier).get(supplier_id)
     if not supplier:
         raise HTTPException(404, "Supplier not found")
@@ -41,7 +46,8 @@ def update_supplier(supplier_id: str, payload: SupplierIn, db: Session = Depends
 
 
 @router.delete("/suppliers/{supplier_id}")
-def delete_supplier(supplier_id: str, db: Session = Depends(get_db)):
+def delete_supplier(supplier_id: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(editor)):
     supplier = db.query(Supplier).get(supplier_id)
     if not supplier:
         raise HTTPException(404, "Supplier not found")
@@ -51,12 +57,13 @@ def delete_supplier(supplier_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/catalog", response_model=list[CatalogComponentOut])
-def list_catalog(db: Session = Depends(get_db)):
+def list_catalog(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(CatalogComponent).all()
 
 
 @router.post("/catalog", response_model=CatalogComponentOut)
-def create_catalog_item(payload: CatalogComponentIn, db: Session = Depends(get_db)):
+def create_catalog_item(payload: CatalogComponentIn, db: Session = Depends(get_db),
+                         current_user: User = Depends(editor)):
     item = CatalogComponent(**payload.model_dump())
     db.add(item)
     db.commit()
@@ -65,7 +72,8 @@ def create_catalog_item(payload: CatalogComponentIn, db: Session = Depends(get_d
 
 
 @router.delete("/catalog/{item_id}")
-def delete_catalog_item(item_id: str, db: Session = Depends(get_db)):
+def delete_catalog_item(item_id: str, db: Session = Depends(get_db),
+                         current_user: User = Depends(editor)):
     item = db.query(CatalogComponent).get(item_id)
     if not item:
         raise HTTPException(404, "Catalog item not found")
@@ -75,7 +83,8 @@ def delete_catalog_item(item_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/catalog/import-csv")
-async def import_catalog_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_catalog_csv(file: UploadFile = File(...), db: Session = Depends(get_db),
+                              current_user: User = Depends(editor)):
     contents = (await file.read()).decode("utf-8")
     reader = csv.DictReader(io.StringIO(contents))
     created = 0
@@ -94,7 +103,7 @@ async def import_catalog_csv(file: UploadFile = File(...), db: Session = Depends
 
 
 @router.get("/catalog/export-csv")
-def export_catalog_csv(db: Session = Depends(get_db)):
+def export_catalog_csv(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     items = db.query(CatalogComponent).all()
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -107,7 +116,8 @@ def export_catalog_csv(db: Session = Depends(get_db)):
 
 
 @router.get("/by-drawing/{drawing_id}")
-def procurement_view_for_drawing(drawing_id: str, db: Session = Depends(get_db)):
+def procurement_view_for_drawing(drawing_id: str, db: Session = Depends(get_db),
+                                  current_user: User = Depends(get_current_user)):
     """Buy/Make/Review grouping derived from the latest BOM for a drawing."""
     bom = db.query(Bom).filter(Bom.drawing_id == drawing_id).order_by(Bom.version.desc()).first()
     if not bom:
