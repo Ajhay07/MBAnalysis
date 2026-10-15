@@ -1,0 +1,9 @@
+{
+  "full_text": "NOTES (SMALL TEXT):\n1. ALL DIMENSIONS IN MILLIMETERS UNLESS NOTED.\n2. BREAK ALL SHARP EDGES 0.25mm MAX.\n3. HOLE A: \u00d86.35mm +0.05/-0.00mm\n4. HOLE B: \u00d83.20mm \u00b10.02mm\n5. SURFACE FINISH: 1.6 Ra MICRONS\n6. TOLERANCE UNLESS SPECIFIED: \u00b10.1mm\n7. DRAWING NO: MB-20391-A",
+  "critical_fields": {
+    "drawing_number": "MB-20391-A",
+    "dimension": "\u00d86.35mm",
+    "tolerance": "\u00b10.1mm"
+  },
+  "notes": "Small (14pt) dense text with multiple tolerance/diameter callouts."
+}

@@ -1,0 +1,9 @@
+{
+  "full_text": "BILL OF MATERIALS\nITEM  PART NO       DESCRIPTION               QTY\n1     BRK-200       Mounting Bracket          4\n2     SHF-305       Drive Shaft 10.0mm        1\n3     BRG-6204      Ball Bearing 6204-2RS     2\n4     SCR-M6X20     Hex Screw M6x20           8",
+  "critical_fields": {
+    "part_number": "BRG-6204",
+    "dimension": "10.0mm",
+    "quantity": "8"
+  },
+  "notes": "Small BOM table; tests fixed-width tabular text recognition."
+}

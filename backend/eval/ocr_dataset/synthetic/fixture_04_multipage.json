@@ -1,0 +1,19 @@
+{
+  "pages": {
+    "1": {
+      "full_text": "DRAWING NO: MB-30077-REV-B\nTITLE: Gearbox Output Shaft",
+      "critical_fields": {
+        "drawing_number": "MB-30077-REV-B"
+      }
+    },
+    "2": {
+      "full_text": "PAGE 2 - DIMENSIONS\nSHAFT DIAMETER: \u00d822.00mm +0.02/-0.00mm\nKEYWAY WIDTH: 6.25mm \u00b10.03mm",
+      "critical_fields": {
+        "dimension": "6.25mm",
+        "diameter": "\u00d822.00mm",
+        "tolerance": "\u00b10.03mm"
+      }
+    }
+  },
+  "notes": "Multi-page PDF; tests per-page rasterization + OCR across pages."
+}

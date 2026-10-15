@@ -1,0 +1,9 @@
+{
+  "full_text": "DRAWING NO: MB-40012-A  DIA \u00d89.50mm \u00b10.08mm",
+  "critical_fields": {
+    "drawing_number": "MB-40012-A",
+    "diameter": "\u00d89.50mm",
+    "tolerance": "\u00b10.08mm"
+  },
+  "notes": "Text rotated ~4 degrees; used to compare OCR_PREPROCESS_DESKEW on vs off."
+}

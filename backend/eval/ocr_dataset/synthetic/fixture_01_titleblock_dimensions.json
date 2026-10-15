@@ -1,0 +1,10 @@
+{
+  "full_text": "DRAWING NO: MB-10045-REV-C\nTITLE: Pump Housing Bracket\nREVISION: C   SCALE: 1:2   UNITS: mm\nBORE DIAMETER: \u00d812.5mm  +/-0.1mm TOLERANCE\nOVERALL LENGTH: 45.25mm\nWALL THICKNESS: 3.75mm \u00b10.05mm\nMATERIAL: Aluminum 6061-T6",
+  "critical_fields": {
+    "drawing_number": "MB-10045-REV-C",
+    "dimension": "45.25mm",
+    "tolerance": "\u00b10.05mm",
+    "diameter": "\u00d812.5mm"
+  },
+  "notes": "Title block + dimension callouts; tests decimals, diameter symbol, tolerance."
+}
