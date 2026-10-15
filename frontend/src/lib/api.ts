@@ -49,6 +49,21 @@ export interface Drawing {
   created_at: string;
   updated_at: string;
   error_message?: string | null;
+  job_stage?: string | null;
+  job_retry_count?: number | null;
+  job_failure_reason?: string | null;
+}
+
+export interface JobRecord {
+  id: string;
+  job_type: string;
+  status: string;
+  stage: string;
+  retry_count: number;
+  failure_reason: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  analysis_id: string | null;
 }
 
 export interface Component {
@@ -175,6 +190,8 @@ export const api = {
   uploadDrawing: (formData: FormData) =>
     request<Drawing>("/api/drawings", { method: "POST", body: formData }),
   analyzeDrawing: (id: string) => request<Analysis>(`/api/drawings/${id}/analyze`, { method: "POST" }),
+  reprocessDrawing: (id: string) => request<Analysis>(`/api/drawings/${id}/reprocess`, { method: "POST" }),
+  listDrawingJobs: (id: string) => request<JobRecord[]>(`/api/drawings/${id}/jobs`),
   listAnalyses: (id: string) => request<Analysis[]>(`/api/drawings/${id}/analyses`),
 
   getAnalysis: (id: string) => request<Analysis>(`/api/analyses/${id}`),

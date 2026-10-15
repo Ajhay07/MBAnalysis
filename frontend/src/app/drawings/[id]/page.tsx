@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
-import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem } from "@/lib/api";
+import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord } from "@/lib/api";
 import { DemoBadge, StatusBadge, MakeBuyBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 
@@ -19,6 +19,8 @@ export default function DrawingViewerPage() {
   const [bom, setBom] = useState<Bom | null>(null);
   const [bomTree, setBomTree] = useState<BomTree | null>(null);
   const [page, setPage] = useState(1);
+  const [jobs, setJobs] = useState<JobRecord[]>([]);
+  const [showJobDetails, setShowJobDetails] = useState(false);
 
   const load = useCallback(async () => {
     const d = await api.getDrawing(id);
@@ -31,7 +33,18 @@ export default function DrawingViewerPage() {
     const latestBom = boms[0] || null;
     setBom(latestBom);
     setBomTree(latestBom ? await api.getBomTree(latestBom.id) : null);
+    setJobs(await api.listDrawingJobs(id));
   }, [id]);
+
+  async function reprocess() {
+    setBusy(true);
+    try {
+      await api.reprocessDrawing(id);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (id) load();
@@ -92,6 +105,15 @@ export default function DrawingViewerPage() {
             <span className="font-mono text-xs">{drawing.drawing_number}</span>
             <StatusBadge status={drawing.status} />
             {drawing.is_demo && <DemoBadge />}
+            {drawing.status === "Failed" && (
+              <button
+                className="text-xs underline text-red-700"
+                onClick={() => setShowJobDetails((s) => !s)}
+                title={drawing.job_failure_reason || drawing.error_message || "Processing failed"}
+              >
+                processing details{drawing.job_retry_count ? ` (retry ${drawing.job_retry_count})` : ""}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button className="btn-secondary !px-2 !py-1" onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>
@@ -157,11 +179,31 @@ export default function DrawingViewerPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
-              <PlayCircle size={15} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
-            </button>
+            {drawing.status === "Failed" ? (
+              <button className="btn-secondary" disabled={busy} onClick={reprocess}>
+                <PlayCircle size={15} /> Retry Analysis
+              </button>
+            ) : (
+              <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
+                <PlayCircle size={15} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
+              </button>
+            )}
           </div>
         </div>
+
+        {showJobDetails && jobs.length > 0 && (
+          <div className="mb-4 border border-border rounded p-3 bg-[#f8f7f2] text-xs space-y-2">
+            <div className="font-semibold">Processing details</div>
+            {jobs.map((j) => (
+              <div key={j.id} className="flex justify-between gap-2 border-b border-border/50 pb-1 last:border-0">
+                <span className="font-mono">{j.stage}</span>
+                <span>{j.status}</span>
+                <span>retry {j.retry_count}</span>
+                {j.failure_reason && <span className="text-red-700 truncate max-w-[50%]" title={j.failure_reason}>{j.failure_reason}</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {drawing.error_message && (
           <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-industrial p-3">
