@@ -6,6 +6,7 @@ import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft
 import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion } from "@/lib/api";
 import { DemoBadge, StatusBadge, MakeBuyBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
+import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
 
 function OcrOverlay({
   evidence,
@@ -439,6 +440,7 @@ export default function DrawingViewerPage() {
             {bom && (
               <div className="mt-4">
                 <BomPanel bom={bom} tree={bomTree} onUpdate={updateBomLineItem} />
+                <InventoryAvailabilityPanel bomId={bom.id} />
               </div>
             )}
           </>

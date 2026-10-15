@@ -176,6 +176,56 @@ export interface OcrPageEvidence {
   image_height: number | null;
 }
 
+export interface AvailabilityLine {
+  bom_line_item_id: string;
+  part_number: string;
+  description: string;
+  material: string;
+  grade: string;
+  unit: string;
+  required_quantity: number | null;
+  on_hand: number;
+  reserved: number;
+  quarantined: number;
+  usable_available: number;
+  this_job_allocation: number;
+  net_shortage: number | null;
+  status: "AVAILABLE" | "PARTIALLY_AVAILABLE" | "OUT_OF_STOCK" | "REVIEW_REQUIRED";
+  explanation: string;
+  matched_lot_ids: string[];
+  supplier_name: string | null;
+  lead_time_days: number | null;
+}
+
+export interface AvailabilityReport {
+  bom_id: string;
+  production_quantity: number;
+  summary: Record<string, number>;
+  lines: AvailabilityLine[];
+}
+
+export interface RequisitionLine {
+  id: string;
+  material_code: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  supplier_id: string | null;
+  catalog_component_id: string | null;
+  unit_cost: number | null;
+}
+
+export interface Requisition {
+  id: string;
+  bom_id: string;
+  status: string;
+  created_at: string;
+  created_by: string;
+  approved_at: string | null;
+  approved_by: string | null;
+  lines: RequisitionLine[];
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -262,6 +312,22 @@ export const api = {
   loadDemo: () => request<{ ok: boolean; created: number }>("/api/demo/load", { method: "POST" }),
   resetDemo: () => request<{ ok: boolean }>("/api/demo/reset", { method: "POST" }),
   demoStatus: () => request<{ demo_drawings: number; loaded: boolean }>("/api/demo/status"),
+
+  getAvailability: (bomId: string, productionQuantity: number) =>
+    request<AvailabilityReport>(
+      `/api/inventory/availability/${bomId}?production_quantity=${productionQuantity}`
+    ),
+  draftRequisition: (bomId: string, productionQuantity: number) =>
+    request<Requisition>(
+      `/api/inventory/requisitions/draft?bom_id=${bomId}&production_quantity=${productionQuantity}`,
+      { method: "POST" }
+    ),
+  listRequisitionsForBom: (bomId: string) =>
+    request<Requisition[]>(`/api/inventory/requisitions/by-bom/${bomId}`),
+  approveRequisition: (id: string) =>
+    request<Requisition>(`/api/inventory/requisitions/${id}/approve`, { method: "POST" }),
+  rejectRequisition: (id: string) =>
+    request<Requisition>(`/api/inventory/requisitions/${id}/reject`, { method: "POST" }),
 
   calc: (endpoint: string, payload: Record<string, unknown>) =>
     request<any>(`/api/calculations/${endpoint}`, {

@@ -36,3 +36,26 @@ export function MakeBuyBadge({ value }: { value: string }) {
     </span>
   );
 }
+
+const AVAILABILITY_STYLES: Record<string, string> = {
+  AVAILABLE: "bg-emerald-100 text-emerald-800",
+  PARTIALLY_AVAILABLE: "bg-amber-100 text-amber-800",
+  OUT_OF_STOCK: "bg-red-100 text-red-700",
+  REVIEW_REQUIRED: "bg-blue-100 text-blue-700",
+};
+
+const AVAILABILITY_LABELS: Record<string, string> = {
+  AVAILABLE: "Available",
+  PARTIALLY_AVAILABLE: "Partial",
+  OUT_OF_STOCK: "Out of Stock",
+  REVIEW_REQUIRED: "Review Required",
+};
+
+export function AvailabilityBadge({ status }: { status: string }) {
+  const cls = AVAILABILITY_STYLES[status] || "bg-gray-100 text-gray-600";
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+      {AVAILABILITY_LABELS[status] || status}
+    </span>
+  );
+}
