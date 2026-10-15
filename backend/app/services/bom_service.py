@@ -76,7 +76,7 @@ def build_bom_tree(db: Session, bom: Bom) -> list[dict]:
     for item in items:
         by_parent.setdefault(item.parent_line_item_id, []).append(item)
 
-    def node(item: BomLineItem) -> dict:
+    def node(item: BomLineItem, level: int) -> dict:
         return {
             "id": item.id,
             "part_number": item.part_number,
@@ -89,10 +89,22 @@ def build_bom_tree(db: Session, bom: Bom) -> list[dict]:
             "unit_cost": item.unit_cost,
             "parent_line_item_id": item.parent_line_item_id,
             "component_id": item.component_id,
-            "children": [node(child) for child in by_parent.get(item.id, [])],
+            "level": level,
+            "children": [node(child, level + 1) for child in by_parent.get(item.id, [])],
         }
 
-    return [node(item) for item in by_parent.get(None, [])]
+    return [node(item, 0) for item in by_parent.get(None, [])]
+
+
+def max_tree_depth(nodes: list[dict]) -> int:
+    """Depth of the deepest node in a build_bom_tree() result (0 = flat, every node
+    top-level/childless). Used by the frontend to decide whether tree view should default on."""
+    deepest = 0
+    for n in nodes:
+        deepest = max(deepest, n.get("level", 0))
+        if n.get("children"):
+            deepest = max(deepest, max_tree_depth(n["children"]))
+    return deepest
 
 
 def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "system") -> Bom:

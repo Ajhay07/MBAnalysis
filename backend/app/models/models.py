@@ -88,6 +88,15 @@ class Analysis(Base):
     drawing = relationship("Drawing", back_populates="analyses")
     components = relationship("Component", back_populates="analysis", cascade="all, delete-orphan")
 
+    @property
+    def page_count(self) -> int:
+        """Highest source_page across this analysis's components (and recorded dimensions),
+        i.e. how many pages the frontend should let the user page through. Derived, not
+        persisted - no migration needed since it is computed from existing data."""
+        pages = [c.source_page or 1 for c in self.components]
+        pages.extend(d.get("page", 1) for d in (self.dimensions or []) if isinstance(d, dict))
+        return max(pages) if pages else 1
+
 
 class Component(Base):
     __tablename__ = "components"

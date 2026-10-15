@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User
 from app.schemas.api import DrawingOut, AnalysisOut
-from app.services.analysis_pipeline import run_analysis, drawing_abspath
+from app.services.analysis_pipeline import run_analysis, drawing_abspath, page_preview_path, PdfProcessingError
 from app.services.file_validation import (
     FileValidationError, validate_extension, validate_size, build_stored_path,
     validate_content_matches_extension,
@@ -139,8 +139,27 @@ def analyze_drawing(drawing_id: str, db: Session = Depends(get_db),
         raise HTTPException(404, "Drawing not found")
     drawing.status = DrawingStatus.QUEUED
     db.commit()
-    analysis = run_analysis(db, drawing, actor=current_user.email)
+    try:
+        analysis = run_analysis(db, drawing, actor=current_user.email)
+    except PdfProcessingError as exc:
+        # run_analysis already marked the Drawing Failed with this reason and committed it;
+        # surface it as a clean 422 rather than an unhandled 500.
+        raise HTTPException(status_code=422, detail=str(exc))
     return analysis
+
+
+@router.get("/{drawing_id}/pages/{page_number}/preview")
+def get_drawing_page_preview(drawing_id: str, page_number: int, db: Session = Depends(get_db),
+                              current_user: User = Depends(get_current_user)):
+    """Per-page raster preview for multi-page PDFs (page 1..N). Non-PDF single-page drawings
+    only ever have page 1, which is the original uploaded file itself - use /file for those."""
+    drawing = db.query(Drawing).get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "Drawing not found")
+    path = page_preview_path(drawing, page_number)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Page preview not found")
+    return FileResponse(path, media_type="image/png")
 
 
 @router.get("/{drawing_id}/analyses", response_model=list[AnalysisOut])

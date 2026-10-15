@@ -56,6 +56,7 @@ class AnalysisOut(BaseModel):
     raw_ocr_text: str
     overall_confidence: float
     created_at: datetime
+    page_count: int = 1
     components: list[ComponentOut] = []
 
     model_config = {"from_attributes": True}

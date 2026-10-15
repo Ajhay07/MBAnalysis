@@ -90,11 +90,15 @@ cd backend
 .\venv\Scripts\Activate.ps1
 pytest -q
 ```
-49/49 tests passing at time of writing (file validation, calculation engine exactness,
+63/63 tests passing at time of writing (file validation, calculation engine exactness,
 Make/Buy/Review classification, BOM generation from a seeded analysis, demo-data isolation,
-AI-provider-missing-key fallback, plus `tests/test_auth.py`: login success/failure, token
-validation (missing/invalid/expired), protected-route 401s, role-gated 403s, and that the audit
-trail records the real authenticated actor).
+AI-provider-missing-key fallback, hierarchical BOM cycle/rollup/tree tests, PDF rasterization
+and multi-page analysis (`tests/test_pdf_pipeline.py`: 3-page PDF -> per-page components,
+embedded-text capture, corrupt PDF, password-protected PDF, zero-page PDF - all synthetic PDFs
+generated on the fly with reportlab/pymupdf, no binary fixtures committed), plus
+`tests/test_auth.py`: login success/failure, token validation (missing/invalid/expired),
+protected-route 401s, role-gated 403s, and that the audit trail records the real authenticated
+actor).
 
 ### Frontend
 ```powershell
@@ -216,22 +220,64 @@ to `/login`. Enter the admin email/password from step 2.
   only as a fallback for anything invoked outside a request context (e.g. running `seed.py`
   directly from the command line rather than through `POST /api/demo/load`).
 
+## PDF rasterization (done)
+
+PDFs are no longer a second-class format. `backend/app/services/analysis_pipeline.py` opens
+every uploaded PDF with `pymupdf` (`fitz`) — a **pure-pip** dependency with no external binary
+required (no poppler, no system install) — and, per page:
+- extracts the embedded text layer via `page.get_text()`,
+- rasterizes the page at ~210-290 DPI (`fitz.Matrix(3.0, 3.0)`, well above the library default
+  of 72 DPI) and runs the existing OpenCV/Tesseract OCR preprocessing on that raster, same as
+  the PNG/JPG path, so scanned pages with no text layer still get OCR'd correctly,
+- feeds the page through the configured provider (OpenAI vision or `DemoProvider`)
+  independently, stamping every resulting component's `source_page` with that page's true
+  physical page number,
+- saves one PNG preview per page next to the original upload, served at
+  `GET /api/drawings/{id}/pages/{page_number}/preview`, so the frontend can page through a
+  multi-page PDF exactly as it looked in the original file.
+
+Failures are handled without 500s: a corrupt file, a password-protected PDF (`doc.is_encrypted`
+with no usable empty password), and a zero-page PDF are all caught as `PdfProcessingError`,
+mark the `Drawing` `Failed` with a specific reason string, and surface as a `422` from
+`POST /api/drawings/{id}/analyze` — never an unhandled exception. Oversized PDFs are rejected at
+upload time by the existing generic `MAX_UPLOAD_MB` check (it was already extension-agnostic).
+
+The frontend drawing viewer (`frontend/src/app/drawings/[id]/page.tsx`) shows prev/next page
+navigation for any PDF whose analysis has more than one page, renders that page's raster
+preview, and lets you jump straight from a component card in the right panel to the page it was
+found on.
+
+**Caveat**: embedded text and OCR text for a page are concatenated rather than deduplicated
+token-by-token when both exist and disagree — acceptable for the provider's own text input, but
+not a canonical "final" text layer.
+
+## Hierarchical BOM (done)
+
+The BOM tree endpoint (`GET /api/boms/{bom_id}/tree`, already backed by
+`build_bom_tree`/cycle-safe reparenting/qty rollup from the previous milestone) now also returns
+each node's `level` (0 = top-level), and `max_tree_depth()` lets the frontend decide which view
+to default to.
+
+`frontend/src/components/BomPanel.tsx` is a new, single component that renders **both** a flat
+list and an indented, expand/collapsible tree from the same tree/flat API data, defaulting to
+tree view when the fetched tree nests deeper than depth 1 (otherwise flat), with a toggle to
+switch manually. Both views render through the exact same `Row` component and the exact same
+`onUpdate(lineItemId, patch)` handler (wired to `PATCH /api/boms/line-items/{id}`) — editing
+quantity, material, or Make/Buy works identically and calls identical code in either view, per
+line item `total_quantity` (qty rollup) and the tree's `level`/indentation are both visible in
+the UI.
+
 ## Known limitations
 
-- PDF pages are not rasterized for OpenCV preprocessing/OCR in this build (image formats — PNG/
-  JPG/TIFF — get full preprocessing + OCR; PDFs are stored/served/viewable but skip the
-  OCR/preprocessing step). Extend `services/analysis_pipeline._load_image_array` with a PDF
-  renderer (e.g. `pdf2image` + poppler) to add this.
-- Multi-page drawings are supported in the data model (`source_page`) but the viewer UI does not
-  yet page through multi-page PDFs.
+- Embedded-text/OCR merging on a PDF page is a simple concatenation, not a true reconciled text
+  layer (see PDF rasterization section above).
 - Supplier/catalog data has no real pricing seeded (by design — no fabricated prices).
 - Authentication is email+password only — no SSO/OAuth, no password reset flow, no refresh
   tokens (see "Authentication Setup" above for what is implemented).
 - Background jobs are synchronous-in-request rather than a true async queue (see above).
-- Frontend BOM editing UI shows a flat list; the data model supports parent/child nesting
-  (`parent_line_item_id`/`parent_component_id`) and BOM generation preserves the relationship,
-  but there is no UI yet to author or visualize the hierarchy (hierarchical BOM) beyond this
-  flat list.
+- BOM tree editing supports qty/material/make-buy inline; re-parenting a line item (drag-and-drop
+  into a different parent) still has to go through the API directly — the tree UI doesn't yet
+  expose a drag target for it, though the cycle-safe backend endpoint fully supports it.
 - This has not been validated against real engineering drawings — only synthetic demo drawings.
 
 ## Security basics implemented

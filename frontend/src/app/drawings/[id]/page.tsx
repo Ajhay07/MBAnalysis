@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet } from "lucide-react";
-import { api, Drawing, Analysis, drawingFileUrl, Component } from "@/lib/api";
+import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem } from "@/lib/api";
 import { DemoBadge, StatusBadge, MakeBuyBadge } from "@/components/Badges";
+import BomPanel from "@/components/BomPanel";
 
 export default function DrawingViewerPage() {
   const params = useParams();
@@ -15,6 +16,9 @@ export default function DrawingViewerPage() {
   const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
   const [bomMsg, setBomMsg] = useState<string | null>(null);
+  const [bom, setBom] = useState<Bom | null>(null);
+  const [bomTree, setBomTree] = useState<BomTree | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     const d = await api.getDrawing(id);
@@ -22,6 +26,11 @@ export default function DrawingViewerPage() {
     const a = await api.listAnalyses(id);
     setAnalyses(a);
     setActiveAnalysis(a[0] || null);
+    setPage(1);
+    const boms = await api.listBomsForDrawing(id);
+    const latestBom = boms[0] || null;
+    setBom(latestBom);
+    setBomTree(latestBom ? await api.getBomTree(latestBom.id) : null);
   }, [id]);
 
   useEffect(() => {
@@ -48,8 +57,10 @@ export default function DrawingViewerPage() {
     if (!activeAnalysis) return;
     setBusy(true);
     try {
-      const bom = await api.generateBom(activeAnalysis.id);
-      setBomMsg(`BOM v${bom.version} generated with ${bom.line_items.length} line items.`);
+      const generated = await api.generateBom(activeAnalysis.id);
+      setBomMsg(`BOM v${generated.version} generated with ${generated.line_items.length} line items.`);
+      setBom(generated);
+      setBomTree(await api.getBomTree(generated.id));
     } finally {
       setBusy(false);
     }
@@ -58,6 +69,14 @@ export default function DrawingViewerPage() {
   async function updateComponent(c: Component, patch: Partial<Component>) {
     await api.updateComponent(c.id, patch);
     load();
+  }
+
+  async function updateBomLineItem(lineItemId: string, patch: Partial<BomLineItem>) {
+    if (!bom) return;
+    await api.updateBomLineItem(lineItemId, patch);
+    const [freshBom, freshTree] = await Promise.all([api.getBom(bom.id), api.getBomTree(bom.id)]);
+    setBom(freshBom);
+    setBomTree(freshTree);
   }
 
   if (!drawing) {
@@ -85,7 +104,15 @@ export default function DrawingViewerPage() {
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#f2f1ec] flex items-center justify-center p-6">
-          {["pdf"].includes(drawing.file_type) ? (
+          {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={drawingPagePreviewUrl(drawing.id, page)}
+              alt={`${drawing.title || drawing.drawing_number} - page ${page}`}
+              style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
+              className="max-w-none transition-transform"
+            />
+          ) : drawing.file_type === "pdf" ? (
             <embed src={drawingFileUrl(drawing.id)} type="application/pdf" className="w-full h-full" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
@@ -97,6 +124,27 @@ export default function DrawingViewerPage() {
             />
           )}
         </div>
+        {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 && (
+          <div className="h-12 border-t border-border flex items-center justify-center gap-3">
+            <button
+              className="btn-secondary !px-2 !py-1"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-xs">
+              Page {page} of {activeAnalysis?.page_count ?? 1}
+            </span>
+            <button
+              className="btn-secondary !px-2 !py-1"
+              disabled={page >= (activeAnalysis?.page_count ?? 1)}
+              onClick={() => setPage((p) => Math.min(activeAnalysis?.page_count ?? 1, p + 1))}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right pane: analysis workspace */}
@@ -175,6 +223,18 @@ export default function DrawingViewerPage() {
                     <div className="text-sm">{c.description}</div>
                     <div className="text-xs text-steel mt-1">
                       {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
+                      {(activeAnalysis?.page_count ?? 1) > 1 && (
+                        <>
+                          {" "}
+                          &middot;{" "}
+                          <button
+                            className="underline hover:text-ink"
+                            onClick={() => setPage(c.source_page || 1)}
+                          >
+                            Page {c.source_page || 1}
+                          </button>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <select
@@ -210,6 +270,12 @@ export default function DrawingViewerPage() {
               </button>
             </div>
             {bomMsg && <div className="mt-3 text-sm text-emerald-700">{bomMsg}</div>}
+
+            {bom && (
+              <div className="mt-4">
+                <BomPanel bom={bom} tree={bomTree} onUpdate={updateBomLineItem} />
+              </div>
+            )}
           </>
         )}
       </div>

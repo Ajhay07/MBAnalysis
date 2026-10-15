@@ -82,6 +82,7 @@ export interface Analysis {
   raw_ocr_text: string;
   overall_confidence: number;
   created_at: string;
+  page_count: number;
   components: Component[];
 }
 
@@ -106,6 +107,27 @@ export interface Bom {
   status: string;
   created_at: string;
   line_items: BomLineItem[];
+}
+
+export interface BomTreeNode {
+  id: string;
+  part_number: string;
+  description: string;
+  category: string;
+  quantity: number;
+  total_quantity: number | null;
+  material: string;
+  make_buy: string;
+  unit_cost?: number | null;
+  parent_line_item_id?: string | null;
+  component_id?: string | null;
+  level: number;
+  children: BomTreeNode[];
+}
+
+export interface BomTree {
+  bom_id: string;
+  nodes: BomTreeNode[];
 }
 
 export interface DashboardMetrics {
@@ -168,6 +190,13 @@ export const api = {
 
   listBomsForDrawing: (drawingId: string) => request<Bom[]>(`/api/boms/by-drawing/${drawingId}`),
   getBom: (id: string) => request<Bom>(`/api/boms/${id}`),
+  getBomTree: (id: string) => request<BomTree>(`/api/boms/${id}/tree`),
+  updateBomLineItem: (id: string, payload: Partial<BomLineItem>) =>
+    request<{ ok: boolean }>(`/api/boms/line-items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   approveBom: (id: string) => request<{ ok: boolean }>(`/api/boms/${id}/approve`, { method: "POST" }),
   rejectBom: (id: string) => request<{ ok: boolean }>(`/api/boms/${id}/reject`, { method: "POST" }),
 
@@ -199,6 +228,10 @@ export const api = {
 
 export function drawingFileUrl(id: string): string {
   return `/api/drawings/${id}/file`;
+}
+
+export function drawingPagePreviewUrl(id: string, pageNumber: number): string {
+  return `/api/drawings/${id}/pages/${pageNumber}/preview`;
 }
 
 export function bomExportUrl(bomId: string, kind: "bom.csv" | "bom.xlsx" | "purchase-list.csv" | "material-summary.csv"): string {
