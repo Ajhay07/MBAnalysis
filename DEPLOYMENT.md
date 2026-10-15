@@ -107,6 +107,45 @@ vercel --prod
 (A GitHub repo is linked via `vercel link`; Vercel may also deploy automatically on pushes to
 `main` depending on the Git integration settings in the Vercel dashboard.)
 
+## Public demo login ("Try the demo")
+
+The login page (`frontend/src/app/login/page.tsx`) has a second, visually distinct button below
+the real email/password form: **"Try the demo (read-only)"**. It calls a public, unauthenticated
+backend endpoint, `POST /api/auth/demo-login` (`backend/app/routers/auth.py`), which logs the
+visitor in as a fixed account (`demo@mbanalysis.local` by default, overridable via the
+`DEMO_EMAIL` env var) with role **`viewer`**.
+
+- **No password exists for this account.** The endpoint takes no credentials — it lazily creates
+  the demo user (idempotent; a no-op if it already exists) with a random, never-stored,
+  never-transmitted password purely to satisfy the `hashed_password` NOT NULL column, then issues
+  the same httpOnly JWT cookie the normal `/api/auth/login` flow issues. There is nothing to leak
+  or guess, which is the point: it's not "a weak demo password", it's "no password at all".
+- **Why `viewer` and not `engineer`:** every mutating endpoint in the app (approving/rejecting
+  BOMs, editing components, deleting drawings, loading/resetting demo data, generating BOMs) is
+  already gated by `require_role("admin", "engineer")` in `app/auth.py`. `viewer` is excluded by
+  that gate, so a visitor who clicks the demo button gets full read access to the 3 seeded demo
+  projects (drawings, BOM trees, procurement data, calculations) but any mutation attempt returns
+  **403 Forbidden** — verified live (see below), not just inferred from reading the code.
+- **The owner's real admin account and password are completely unaffected** — this feature only
+  adds a second, strictly-less-privileged login path; the existing `/api/auth/login` form,
+  `ADMIN_EMAIL`/`ADMIN_PASSWORD`, and `create_admin.py` bootstrap are untouched.
+- Live verification performed against the production Railway backend
+  (`https://mbanalysis-backend-production.up.railway.app`):
+  - `POST /api/auth/demo-login` → 200, sets cookie, `GET /api/auth/me` → `role: "viewer"`.
+  - `GET /api/demo/status` as the demo viewer → `{"demo_drawings": 3, "loaded": true}` (the demo
+    data was already loaded in production from the prior deployment session).
+  - `GET /api/dashboard/metrics`, `GET /api/drawings` as the demo viewer → 200, real data
+    returned (read access works).
+  - `POST /api/demo/load`, `DELETE /api/drawings/{id}`, `POST /api/boms/{id}/approve` as the demo
+    viewer → all **403 Forbidden** (mutation blocked, as intended).
+- Not rate-limited at the application layer (same as the real login endpoint). Put a
+  reverse-proxy/WAF rate limit on `/api/auth/demo-login` in front of Railway if abuse becomes a
+  concern — it can only ever mint read-only sessions, so the worst case is noisy traffic, not a
+  privilege or data-integrity issue.
+- Minor follow-up (not yet done): the dashboard still renders the "Load Demo Project" / "Reset
+  Demo Data" buttons for a viewer session — clicking them correctly fails with 403, but hiding
+  them client-side for `role === "viewer"` would be a cleaner UX polish.
+
 ## Known limitations / things to keep an eye on
 
 - **Cold start / OCR model download:** the very first OCR call after a fresh deploy (empty

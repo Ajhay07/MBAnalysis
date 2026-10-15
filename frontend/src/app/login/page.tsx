@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +27,20 @@ export default function LoginPage() {
       setError("Incorrect email or password.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDemoLogin() {
+    setError(null);
+    setDemoLoading(true);
+    try {
+      await api.demoLogin();
+      await refresh();
+      router.replace("/");
+    } catch (err: any) {
+      setError("Could not start the demo session. Please try again.");
+    } finally {
+      setDemoLoading(false);
     }
   }
 
@@ -72,6 +87,25 @@ export default function LoginPage() {
             <LogIn size={16} /> {submitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-5">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs text-steel">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDemoLogin}
+          disabled={demoLoading}
+          className="w-full justify-center border border-border rounded-industrial px-3 py-2 text-sm font-medium text-steel hover:bg-surface flex items-center gap-2"
+        >
+          <LogIn size={16} /> {demoLoading ? "Starting demo..." : "Try the demo (read-only)"}
+        </button>
+        <p className="text-xs text-steel mt-2 text-center">
+          Instantly explore the sample projects as a read-only viewer - no account needed. You
+          won&apos;t be able to edit, approve, or delete anything.
+        </p>
       </div>
     </div>
   );

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 240
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
+    # Email for the public "Try the demo" read-only viewer account used by
+    # POST /api/auth/demo-login. No corresponding password setting exists - that endpoint never
+    # takes or checks a password (see backend/app/routers/auth.py demo_login docstring).
+    DEMO_EMAIL: str = "demo@mbanalysis.local"
 
     # --- OCR (PaddleOCR: local, free, no API key - distinct from AI vision interpretation) ---
     OCR_ENABLED: bool = True

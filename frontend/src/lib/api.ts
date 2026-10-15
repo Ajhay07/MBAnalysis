@@ -9,7 +9,11 @@ const BASE = "";
 // itself to *determine* auth state, and a 401 there is an expected, handled outcome, not a reason
 // to redirect.
 function isAuthProbePath(path: string): boolean {
-  return path.startsWith("/api/auth/me") || path.startsWith("/api/auth/login");
+  return (
+    path.startsWith("/api/auth/me") ||
+    path.startsWith("/api/auth/login") ||
+    path.startsWith("/api/auth/demo-login")
+  );
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -187,6 +191,11 @@ export const api = {
     request<{ access_token: string; token_type: string; expires_in_minutes: number }>(
       "/api/auth/login",
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }
+    ),
+  demoLogin: () =>
+    request<{ access_token: string; token_type: string; expires_in_minutes: number }>(
+      "/api/auth/demo-login",
+      { method: "POST" }
     ),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   me: () => request<CurrentUser>("/api/auth/me"),
