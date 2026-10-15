@@ -13,8 +13,36 @@ from app.config import get_settings
 from app.database import SessionLocal, Base, engine
 from app.models.models import (
     Drawing, Analysis, Component, Bom, BomLineItem, Supplier, CatalogComponent,
-    DrawingStatus, MakeBuy, AuditLog,
+    DrawingStatus, MakeBuy, AuditLog, InventoryLot,
 )
+
+# Demo inventory lots, deliberately tied to the seeded gearbox/shaft/bracket BOM line items
+# above so the live demo can show a non-trivial availability spread: some AVAILABLE, some
+# PARTIAL, some OUT_OF_STOCK, and at least one REVIEW_REQUIRED (via an unmatched/ambiguous item
+# or an unverified spec - see GB-1001-10 / Housing, which is Unverified above).
+DEMO_INVENTORY_LOTS = [
+    # Plenty of stock -> AVAILABLE at the demo production quantities used in tests/UI.
+    dict(material_code="6205-2RS", material="", grade="", description="[DEMO] Deep Groove Ball Bearing",
+         unit="ea", on_hand_qty="50", reserved_qty="0", quarantined_qty="0", location="Bin A-12"),
+    dict(material_code="6005-2Z", material="", grade="", description="[DEMO] Ball Bearing",
+         unit="ea", on_hand_qty="40", reserved_qty="0", quarantined_qty="0", location="Bin A-14"),
+    dict(material_code="M6-BOLT", material="", grade="", description="[DEMO] Hex Bolt M6x20",
+         unit="ea", on_hand_qty="500", reserved_qty="0", quarantined_qty="0", location="Bin C-02"),
+    # Steel 4140 for the input shaft - enough for a couple of units but not many -> PARTIAL at
+    # higher production quantities.
+    dict(material_code=None, material="Steel 4140", grade="Q&T", description="[DEMO] Steel 4140 bar stock",
+         unit="ea", on_hand_qty="3", reserved_qty="0", quarantined_qty="0", location="Rack R-3",
+         lot_number="L-4140-01"),
+    # Steel 8620 for gears - some quarantined (pending incoming inspection), tight supply.
+    dict(material_code=None, material="Steel 8620", grade="Carburized", description="[DEMO] Steel 8620 bar stock",
+         unit="ea", on_hand_qty="2", reserved_qty="1", quarantined_qty="1", location="Rack R-5",
+         lot_number="L-8620-01"),
+    # Retaining ring / spring steel: zero stock -> OUT_OF_STOCK.
+    dict(material_code="SH-2002-05", material="Spring Steel", grade="", description="[DEMO] Retaining Ring stock",
+         unit="ea", on_hand_qty="0", reserved_qty="0", quarantined_qty="0", location="Bin D-01"),
+    # No lot at all for the bracket's galvanized steel -> REVIEW_REQUIRED (unmatched), in
+    # addition to the Unverified housing component already producing a REVIEW_REQUIRED line.
+]
 
 SEED_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_assets")
 
@@ -151,6 +179,11 @@ def seed_demo_data(db, actor: str = "system") -> int:
         db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="demo_seeded", details={},
                          actor=actor))
         created += 1
+
+    if db.query(InventoryLot).filter(InventoryLot.is_demo == True).count() == 0:  # noqa: E712
+        for lot in DEMO_INVENTORY_LOTS:
+            db.add(InventoryLot(is_demo=True, **lot))
+        db.commit()
 
     db.commit()
     return created

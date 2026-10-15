@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, engine
-from app.routers import drawings, analyses, boms, procurement, calculations, dashboard, review, demo, auth
+from app.routers import drawings, analyses, boms, procurement, calculations, dashboard, review, demo, auth, inventory
 from app.security import get_jwt_secret
 
 settings = get_settings()
@@ -41,6 +41,7 @@ app.include_router(calculations.router)
 app.include_router(dashboard.router)
 app.include_router(review.router)
 app.include_router(demo.router)
+app.include_router(inventory.router)
 
 
 @app.get("/api/health")

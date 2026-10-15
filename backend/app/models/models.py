@@ -205,6 +205,93 @@ class CatalogComponent(Base):
     supplier_id = Column(String, ForeignKey("suppliers.id"), nullable=True)
     unit_price = Column(Float, nullable=True)
     currency = Column(String, nullable=True)
+    # Minimum order quantity / reorder quantity. Nullable: only populated when real catalog/
+    # supplier data provides it - never fabricated for existing demo rows (see inventory spec).
+    moq = Column(Float, nullable=True)
+    lead_time_days = Column(Integer, nullable=True)
+
+
+class RequisitionStatus(str, enum.Enum):
+    DRAFT = "Draft"
+    PENDING = "Pending"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
+
+
+class InventoryLot(Base):
+    """A physical lot/batch of material or stocked component. Quantities are stored as strings
+    and parsed to Decimal at the service layer (SQLite has no native Decimal type) so arithmetic
+    never silently drifts through float rounding."""
+    __tablename__ = "inventory_lots"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    # Matches BomLineItem.part_number / CatalogComponent.part_number for exact-code matching.
+    material_code = Column(String, nullable=True, index=True)
+    material = Column(String, default="")
+    grade = Column(String, default="")
+    description = Column(String, default="")
+    unit = Column(String, default="ea")
+    on_hand_qty = Column(String, default="0")
+    reserved_qty = Column(String, default="0")  # total reserved across ALL jobs/allocations
+    quarantined_qty = Column(String, default="0")
+    location = Column(String, nullable=True)
+    lot_number = Column(String, nullable=True)
+    supplier_id = Column(String, ForeignKey("suppliers.id"), nullable=True)
+    received_date = Column(DateTime, nullable=True)
+    is_demo = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    allocations = relationship("InventoryAllocation", back_populates="lot", cascade="all, delete-orphan")
+
+
+class InventoryAllocation(Base):
+    """Reserves a quantity of a specific InventoryLot for a specific BOM (production run), so
+    stock already secured for THIS job can be distinguished from stock held for other jobs."""
+    __tablename__ = "inventory_allocations"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    inventory_lot_id = Column(String, ForeignKey("inventory_lots.id"), nullable=False)
+    bom_id = Column(String, ForeignKey("boms.id"), nullable=False)
+    material_code = Column(String, nullable=True)
+    quantity = Column(String, nullable=False)  # Decimal-as-string
+    status = Column(String, default="active")  # active/released
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String, default="system")
+
+    lot = relationship("InventoryLot", back_populates="allocations")
+
+
+class PurchaseRequisition(Base):
+    """Minimal requisition entity: groups shortage lines for a BOM, goes through the same
+    draft -> approve/reject pattern as BOM approval, reusing require_role for gating."""
+    __tablename__ = "purchase_requisitions"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    bom_id = Column(String, ForeignKey("boms.id"), nullable=False)
+    status = Column(SAEnum(RequisitionStatus), default=RequisitionStatus.DRAFT, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String, default="system")
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(String, nullable=True)
+
+    lines = relationship("PurchaseRequisitionLine", back_populates="requisition",
+                          cascade="all, delete-orphan")
+
+
+class PurchaseRequisitionLine(Base):
+    __tablename__ = "purchase_requisition_lines"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    requisition_id = Column(String, ForeignKey("purchase_requisitions.id"), nullable=False)
+    material_code = Column(String, default="")
+    description = Column(String, default="")
+    quantity = Column(String, nullable=False)  # Decimal-as-string (net shortage at creation time)
+    unit = Column(String, default="ea")
+    supplier_id = Column(String, ForeignKey("suppliers.id"), nullable=True)
+    catalog_component_id = Column(String, ForeignKey("catalog_components.id"), nullable=True)
+    unit_cost = Column(Float, nullable=True)
+
+    requisition = relationship("PurchaseRequisition", back_populates="lines")
 
 
 class AuditLog(Base):

@@ -142,6 +142,108 @@ class CatalogComponentOut(CatalogComponentIn):
     model_config = {"from_attributes": True}
 
 
+class InventoryLotIn(BaseModel):
+    material_code: str | None = None
+    material: str = ""
+    grade: str = ""
+    description: str = ""
+    unit: str = "ea"
+    on_hand_qty: float = 0
+    reserved_qty: float = 0
+    quarantined_qty: float = 0
+    location: str | None = None
+    lot_number: str | None = None
+    supplier_id: str | None = None
+
+
+class InventoryLotOut(BaseModel):
+    id: str
+    material_code: str | None = None
+    material: str
+    grade: str
+    description: str
+    unit: str
+    on_hand_qty: float
+    reserved_qty: float
+    quarantined_qty: float
+    location: str | None = None
+    lot_number: str | None = None
+    supplier_id: str | None = None
+    is_demo: bool
+
+    model_config = {"from_attributes": True}
+
+
+class AvailabilityLineOut(BaseModel):
+    bom_line_item_id: str
+    part_number: str
+    description: str
+    material: str
+    grade: str
+    unit: str
+    required_quantity: float | None = None
+    on_hand: float
+    reserved: float
+    quarantined: float
+    usable_available: float
+    this_job_allocation: float
+    net_shortage: float | None = None
+    status: str
+    explanation: str
+    matched_lot_ids: list[str] = []
+    supplier_name: str | None = None
+    lead_time_days: int | None = None
+
+
+class AvailabilityReportOut(BaseModel):
+    bom_id: str
+    production_quantity: float
+    summary: dict[str, int]
+    lines: list[AvailabilityLineOut]
+
+
+class RequisitionLineOut(BaseModel):
+    id: str
+    material_code: str
+    description: str
+    quantity: float
+    unit: str
+    supplier_id: str | None = None
+    catalog_component_id: str | None = None
+    unit_cost: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class RequisitionOut(BaseModel):
+    id: str
+    bom_id: str
+    status: str
+    created_at: datetime
+    created_by: str
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    lines: list[RequisitionLineOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AllocationIn(BaseModel):
+    bom_id: str
+    inventory_lot_id: str
+    quantity: float
+
+
+class AllocationOut(BaseModel):
+    id: str
+    inventory_lot_id: str
+    bom_id: str
+    quantity: float
+    status: str
+
+    model_config = {"from_attributes": True}
+
+
 class DashboardMetrics(BaseModel):
     total_drawings: int
     status_breakdown: dict[str, int]
