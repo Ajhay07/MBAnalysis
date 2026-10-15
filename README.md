@@ -22,7 +22,7 @@ AI provider's output accuracy against a sample of your own real drawings.
                     calculations, dashboard, review, demo)
     auth.py         get_current_user / require_role() FastAPI dependencies
     security.py     password hashing (passlib/bcrypt) + JWT issuing/verification (python-jose)
-  tests/            pytest suite (49 tests)
+  tests/            pytest suite (72 tests)
   create_admin.py   bootstraps the first admin user from ADMIN_EMAIL/ADMIN_PASSWORD
   seed.py           seeds 3 demo projects into the DB
   generate_seed_assets.py  generates the SVG sample drawings in seed_assets/
@@ -55,11 +55,37 @@ Tesseract binary isn't installed, `is_tesseract_available()` returns `False` and
 gracefully (empty text, explanatory message) rather than crashing the app. **Windows install:**
 https://github.com/UB-Mannheim/tesseract/wiki — install, then ensure `tesseract.exe` is on PATH.
 
-### Background jobs
-A lightweight `Job` row (Pending/Running/Done/Failed) is written synchronously around the
-analysis pipeline — no Redis/Celery. This is a deliberate scope decision: single-process FastAPI
-+ BackgroundTasks/synchronous execution is sufficient for a local/demo deployment and keeps setup
-to `pip install` only. For production/multi-worker deployments, swap in a real task queue.
+### Background jobs (Phase 13 — done)
+Every analysis run is tracked by a `Job` row written synchronously around the pipeline — no
+Redis/Celery/separate worker process. This remains a deliberate scope decision: single-process
+FastAPI + in-process synchronous execution is sufficient for a local/demo deployment and keeps
+setup to `pip install` only. For production/multi-worker deployments, swap in a real task queue
+(the `Job` model and stage machine below would map directly onto one).
+
+What *is* fully modeled now (previously a known gap): each `Job` carries `stage` (one of
+`queued`, `extracting_pages`, `ocr`, `vision_analysis`, `persisting`, `needs_review`, `reviewed`,
+`bom_generated`, `failed`, `cancelled`), `retry_count`, `failure_reason`/`last_error`,
+`started_at`/`completed_at`, and a link to the `Analysis` it produced. The pipeline
+(`app/services/analysis_pipeline.py`) advances `stage` as it moves through OCR and vision
+analysis and always reaches a terminal stage — on any failure (corrupt/encrypted/empty PDF, AI
+provider auth error, AI provider timeout/rate-limit/connection/server error after a bounded
+retry+backoff, malformed/schema-invalid AI JSON, or any other unhandled exception) the Drawing
+and Job are marked `Failed` with a specific reason, never left stuck in "Processing" and never
+silently marked successful. `OpenAIVisionProvider` distinguishes auth errors (fail fast, no
+retry) from transient errors (bounded retry with exponential backoff) — see
+`app/providers/openai_provider.py`.
+
+`POST /api/drawings/{id}/reprocess` retries a drawing: it increments `retry_count` and always
+re-invokes the real pipeline against the drawing's own file — it never falls back to
+demo/seeded content, even after a prior failure (`is_demo` stays `false` throughout). `GET
+/api/drawings/{id}/jobs` returns the stage/retry/failure history, and `DrawingOut` carries
+`job_stage`/`job_retry_count`/`job_failure_reason` for the latest run. The Drawing Viewer shows
+a "processing details" toggle with the stage history and a "Retry Analysis" button once a
+drawing has failed.
+
+Covered by `tests/test_job_tracking.py` (success, auth-error failure, transient-error failure,
+malformed-JSON failure, OCR-unavailable graceful degradation, and retry via both the service
+function and the HTTP endpoint).
 
 ### Database
 SQLite by default (`sqlite:///./mbanalysis.db`), zero setup. Swap to Postgres by setting
@@ -90,7 +116,7 @@ cd backend
 .\venv\Scripts\Activate.ps1
 pytest -q
 ```
-63/63 tests passing at time of writing (file validation, calculation engine exactness,
+72/72 tests passing at time of writing (file validation, calculation engine exactness,
 Make/Buy/Review classification, BOM generation from a seeded analysis, demo-data isolation,
 AI-provider-missing-key fallback, hierarchical BOM cycle/rollup/tree tests, PDF rasterization
 and multi-page analysis (`tests/test_pdf_pipeline.py`: 3-page PDF -> per-page components,
@@ -98,7 +124,15 @@ embedded-text capture, corrupt PDF, password-protected PDF, zero-page PDF - all 
 generated on the fly with reportlab/pymupdf, no binary fixtures committed), plus
 `tests/test_auth.py`: login success/failure, token validation (missing/invalid/expired),
 protected-route 401s, role-gated 403s, and that the audit trail records the real authenticated
-actor).
+actor; `tests/test_job_tracking.py` (Phase 13): job stage/retry/failure tracking across success,
+auth-error, transient-error, and malformed-AI-JSON failure modes, OCR-unavailable graceful
+degradation, and retry via both the service function and the `/reprocess` HTTP endpoint;
+`tests/test_e2e_workflow.py` (Phase 16): one scripted end-to-end run through the full real
+stack — login, demo load, analysis fetch, BOM generation, line-item edit, BOM tree rollup,
+procurement grouping cross-checked against the persisted BOM, role-gated approval, CSV/Excel
+export with real exported values checked, and an audit log entry naming the real actor — plus a
+second test uploading a synthetic (generated on the fly) PDF through the real upload+analyze
+path with the AI provider mocked, confirming it is never demo-tagged).
 
 ### Frontend
 ```powershell
@@ -274,11 +308,18 @@ the UI.
 - Supplier/catalog data has no real pricing seeded (by design — no fabricated prices).
 - Authentication is email+password only — no SSO/OAuth, no password reset flow, no refresh
   tokens (see "Authentication Setup" above for what is implemented).
-- Background jobs are synchronous-in-request rather than a true async queue (see above).
+- Background jobs are synchronous-in-request rather than a true async queue/separate worker
+  process (Phase 13's stage/retry/failure tracking is fully modeled on top of this; only the
+  execution model — in-process vs. Redis/Celery/a real queue — remains a deliberate scope
+  choice, not a bug, documented above under "Background jobs").
 - BOM tree editing supports qty/material/make-buy inline; re-parenting a line item (drag-and-drop
   into a different parent) still has to go through the API directly — the tree UI doesn't yet
   expose a drag target for it, though the cycle-safe backend endpoint fully supports it.
 - This has not been validated against real engineering drawings — only synthetic demo drawings.
+- Phase 16's scripted end-to-end test covers one complete gearbox workflow plus one real-upload
+  path; it is not a full regression suite across every possible drawing/BOM shape (the targeted
+  unit/integration tests elsewhere in `tests/` cover edge cases such as cycles, multi-page PDFs,
+  and corrupt files).
 
 ## Security basics implemented
 
