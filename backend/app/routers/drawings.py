@@ -16,6 +16,12 @@ from app.services.file_validation import (
     FileValidationError, validate_extension, validate_size, build_stored_path,
     validate_content_matches_extension,
 )
+from app.services.paddle_ocr import run_page_ocr
+
+try:
+    import cv2
+except Exception:  # pragma: no cover
+    cv2 = None
 
 router = APIRouter(prefix="/api/drawings", tags=["drawings"])
 
@@ -208,6 +214,50 @@ def get_drawing_page_preview(drawing_id: str, page_number: int, db: Session = De
     if not os.path.exists(path):
         raise HTTPException(404, "Page preview not found")
     return FileResponse(path, media_type="image/png")
+
+
+@router.get("/{drawing_id}/pages/{page_number}/ocr")
+def get_page_ocr_regions(drawing_id: str, page_number: int, db: Session = Depends(get_db),
+                          current_user: User = Depends(get_current_user)):
+    """Raw OCR evidence for one page: recognized text regions with confidence + bbox, for the
+    frontend's OCR Evidence viewer. This is the RAW OCR layer (app.services.paddle_ocr) re-run
+    on-demand against the stored page preview image - it is never persisted per-region (only the
+    pipeline's concatenated raw_ocr_text is stored on Analysis) and is kept entirely separate
+    from the human-gated Component/verification_status path: nothing here writes to a Component
+    or sets verification_status. Read-only."""
+    drawing = db.query(Drawing).get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "Drawing not found")
+
+    settings = get_settings()
+    if drawing.file_type == "pdf":
+        path = page_preview_path(drawing, page_number)
+    else:
+        path = drawing_abspath(drawing)
+    if not os.path.exists(path):
+        raise HTTPException(404, "Page image not found")
+    if cv2 is None:
+        raise HTTPException(503, "Image support (opencv) not installed on this server.")
+
+    image = cv2.imread(path)
+    result = run_page_ocr(image, page_number=page_number)
+    return {
+        "page_number": page_number,
+        "configured": result.configured,
+        "error": result.error,
+        "confidence_threshold": settings.OCR_CONFIDENCE_THRESHOLD,
+        "regions": [
+            {
+                "text": r.text,
+                "confidence": r.confidence,
+                "bbox": r.bbox,
+                "low_confidence": r.confidence < settings.OCR_CONFIDENCE_THRESHOLD,
+            }
+            for r in result.regions
+        ],
+        "image_width": int(image.shape[1]) if image is not None else None,
+        "image_height": int(image.shape[0]) if image is not None else None,
+    }
 
 
 @router.get("/{drawing_id}/analyses", response_model=list[AnalysisOut])

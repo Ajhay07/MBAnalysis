@@ -3,9 +3,52 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
-import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord } from "@/lib/api";
+import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion } from "@/lib/api";
 import { DemoBadge, StatusBadge, MakeBuyBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
+
+function OcrOverlay({
+  evidence,
+  selected,
+  onSelect,
+}: {
+  evidence: OcrPageEvidence;
+  selected: OcrRegion | null;
+  onSelect: (r: OcrRegion) => void;
+}) {
+  // bbox coordinates are in the page image's native pixel space, and the image is rendered at
+  // native size (max-w-none) inside a wrapper that itself gets the zoom CSS transform - so no
+  // extra scaling is needed here, boxes line up 1:1 with the underlying <img>.
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      {evidence.regions.map((r, i) => {
+        const xs = r.bbox.map((p) => p[0]);
+        const ys = r.bbox.map((p) => p[1]);
+        const x = Math.min(...xs);
+        const y = Math.min(...ys);
+        const w = Math.max(...xs) - x;
+        const h = Math.max(...ys) - y;
+        const isSelected = selected === r;
+        return (
+          <div
+            key={i}
+            onClick={() => onSelect(r)}
+            className="absolute pointer-events-auto cursor-pointer"
+            style={{
+              left: x,
+              top: y,
+              width: Math.max(w, 2),
+              height: Math.max(h, 2),
+              border: `2px solid ${isSelected ? "#2563eb" : r.low_confidence ? "#d97706" : "#16a34a"}`,
+              backgroundColor: isSelected ? "rgba(37,99,235,0.15)" : r.low_confidence ? "rgba(217,119,6,0.12)" : "transparent",
+            }}
+            title={`${r.text} (${(r.confidence * 100).toFixed(0)}%)`}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export default function DrawingViewerPage() {
   const params = useParams();
@@ -21,6 +64,10 @@ export default function DrawingViewerPage() {
   const [page, setPage] = useState(1);
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [showJobDetails, setShowJobDetails] = useState(false);
+  const [showOcrEvidence, setShowOcrEvidence] = useState(false);
+  const [ocrEvidence, setOcrEvidence] = useState<OcrPageEvidence | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
 
   const load = useCallback(async () => {
     const d = await api.getDrawing(id);
@@ -49,6 +96,27 @@ export default function DrawingViewerPage() {
   useEffect(() => {
     if (id) load();
   }, [id, load]);
+
+  useEffect(() => {
+    if (!showOcrEvidence || !id) return;
+    let cancelled = false;
+    setOcrLoading(true);
+    setSelectedRegion(null);
+    api
+      .getPageOcrEvidence(id, page)
+      .then((evidence) => {
+        if (!cancelled) setOcrEvidence(evidence);
+      })
+      .catch(() => {
+        if (!cancelled) setOcrEvidence(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOcrLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showOcrEvidence, id, page]);
 
   async function runAnalysis() {
     setBusy(true);
@@ -115,7 +183,14 @@ export default function DrawingViewerPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <button
+              className={`text-xs px-2 py-1 rounded-industrial border ${showOcrEvidence ? "bg-ink text-white border-ink" : "border-border text-steel"}`}
+              onClick={() => setShowOcrEvidence((s) => !s)}
+              title="Toggle raw OCR text-region overlay (distinct from AI-interpreted components below)"
+            >
+              OCR Evidence
+            </button>
             <button className="btn-secondary !px-2 !py-1" onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>
               <ZoomOut size={14} />
             </button>
@@ -127,25 +202,66 @@ export default function DrawingViewerPage() {
         </div>
         <div className="flex-1 overflow-auto bg-[#f2f1ec] flex items-center justify-center p-6">
           {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={drawingPagePreviewUrl(drawing.id, page)}
-              alt={`${drawing.title || drawing.drawing_number} - page ${page}`}
-              style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
-              className="max-w-none transition-transform"
-            />
+            <div style={{ transform: `scale(${zoom})`, transformOrigin: "center" }} className="relative inline-block transition-transform">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={drawingPagePreviewUrl(drawing.id, page)}
+                alt={`${drawing.title || drawing.drawing_number} - page ${page}`}
+                className="max-w-none block"
+              />
+              {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
+            </div>
           ) : drawing.file_type === "pdf" ? (
             <embed src={drawingFileUrl(drawing.id)} type="application/pdf" className="w-full h-full" />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={drawingFileUrl(drawing.id)}
-              alt={drawing.title}
-              style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
-              className="max-w-none transition-transform"
-            />
+            <div style={{ transform: `scale(${zoom})`, transformOrigin: "center" }} className="relative inline-block transition-transform">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={drawingFileUrl(drawing.id)} alt={drawing.title} className="max-w-none block" />
+              {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
+            </div>
           )}
         </div>
+        {showOcrEvidence && (
+          <div className="border-t border-border p-3 bg-white text-xs max-h-56 overflow-auto">
+            <div className="font-semibold mb-2 flex items-center justify-between">
+              <span>Raw OCR Evidence (page {page}) &mdash; not human-reviewed</span>
+              {ocrEvidence && <span className="text-steel-light font-normal">threshold {(ocrEvidence.confidence_threshold * 100).toFixed(0)}%</span>}
+            </div>
+            {ocrLoading && <div className="text-steel">Loading OCR regions...</div>}
+            {!ocrLoading && ocrEvidence && !ocrEvidence.configured && (
+              <div className="text-red-700">{ocrEvidence.error || "OCR not available."}</div>
+            )}
+            {!ocrLoading && ocrEvidence?.configured && ocrEvidence.regions.length === 0 && (
+              <div className="text-steel">No text regions detected on this page.</div>
+            )}
+            {selectedRegion ? (
+              <div className="border border-border rounded p-2 bg-[#f8f7f2]">
+                <div className="font-mono">{selectedRegion.text}</div>
+                <div className="text-steel-light mt-1">
+                  confidence {(selectedRegion.confidence * 100).toFixed(0)}%
+                  {selectedRegion.low_confidence && <span className="text-amber-700 font-semibold"> &middot; needs review</span>}
+                  {" "}&middot; page {page} &middot; bbox {JSON.stringify(selectedRegion.bbox)}
+                </div>
+              </div>
+            ) : (
+              ocrEvidence?.configured && ocrEvidence.regions.length > 0 && (
+                <div className="text-steel">Click a highlighted region above to inspect it.</div>
+              )
+            )}
+            {ocrEvidence && ocrEvidence.regions.some((r) => r.low_confidence) && (
+              <div className="mt-2">
+                <div className="font-semibold text-amber-800">Needs review ({ocrEvidence.regions.filter((r) => r.low_confidence).length})</div>
+                <ul className="list-disc list-inside">
+                  {ocrEvidence.regions.filter((r) => r.low_confidence).map((r, i) => (
+                    <li key={i} className="cursor-pointer hover:underline" onClick={() => setSelectedRegion(r)}>
+                      {r.text} ({(r.confidence * 100).toFixed(0)}%)
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
         {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 && (
           <div className="h-12 border-t border-border flex items-center justify-center gap-3">
             <button
@@ -251,7 +367,14 @@ export default function DrawingViewerPage() {
             </div>
 
             <div className="card p-4 mb-4">
-              <h2 className="text-sm font-semibold mb-3">Component Candidates ({activeAnalysis.components.length})</h2>
+              <h2 className="text-sm font-semibold mb-1">
+                Interpreted Component Candidates ({activeAnalysis.components.length})
+              </h2>
+              <p className="text-xs text-steel-light mb-3">
+                AI-interpreted engineering values, human-gated by Verified/Unverified/Rejected and
+                Make/Buy/Review below &mdash; distinct from the raw OCR Evidence panel above, which
+                shows unreviewed machine-read text only.
+              </p>
               <div className="space-y-3">
                 {activeAnalysis.components.map((c) => (
                   <div key={c.id} className="border border-border rounded-industrial p-3">

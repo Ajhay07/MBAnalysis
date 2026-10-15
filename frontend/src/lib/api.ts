@@ -155,6 +155,23 @@ export interface DashboardMetrics {
   recent_activity: { entity_type: string; entity_id: string; action: string; created_at: string }[];
 }
 
+export interface OcrRegion {
+  text: string;
+  confidence: number;
+  bbox: number[][];
+  low_confidence: boolean;
+}
+
+export interface OcrPageEvidence {
+  page_number: number;
+  configured: boolean;
+  error: string | null;
+  confidence_threshold: number;
+  regions: OcrRegion[];
+  image_width: number | null;
+  image_height: number | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -193,6 +210,8 @@ export const api = {
   reprocessDrawing: (id: string) => request<Analysis>(`/api/drawings/${id}/reprocess`, { method: "POST" }),
   listDrawingJobs: (id: string) => request<JobRecord[]>(`/api/drawings/${id}/jobs`),
   listAnalyses: (id: string) => request<Analysis[]>(`/api/drawings/${id}/analyses`),
+  getPageOcrEvidence: (id: string, pageNumber: number) =>
+    request<OcrPageEvidence>(`/api/drawings/${id}/pages/${pageNumber}/ocr`),
 
   getAnalysis: (id: string) => request<Analysis>(`/api/analyses/${id}`),
   updateComponent: (id: string, payload: Partial<Component>) =>
