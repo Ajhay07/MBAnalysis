@@ -14,3 +14,9 @@ openpyxl==3.1.5
 pytest==8.3.3
 httpx==0.27.2
 numpy==1.26.4
+passlib[bcrypt]==1.7.4
+# Pinned: passlib 1.7.4's bcrypt backend probes `bcrypt.__about__`, which bcrypt>=4.1 removed,
+# causing a hard crash on first hash/verify call. bcrypt==4.0.1 is the newest release that still
+# has it. Do not bump bcrypt without re-testing passlib compatibility.
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
