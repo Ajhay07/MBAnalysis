@@ -32,6 +32,32 @@ def validate_extension(filename: str) -> str:
     return ext
 
 
+# Magic-byte signatures for each allowed extension family. Extension on disk
+# is attacker-controlled (a renamed .exe can claim to be .pdf), so content is
+# sniffed independently rather than trusted from the filename alone.
+_MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".tif": (b"II*\x00", b"MM\x00*"),
+    ".tiff": (b"II*\x00", b"MM\x00*"),
+}
+
+
+def validate_content_matches_extension(ext: str, header_bytes: bytes) -> None:
+    """Sniffs the first bytes of the upload and rejects content whose real
+    type does not match the claimed extension (defends against a disguised
+    executable or script uploaded with a spoofed .pdf/.png/etc name)."""
+    signatures = _MAGIC_SIGNATURES.get(ext)
+    if not signatures:
+        return
+    if not any(header_bytes.startswith(sig) for sig in signatures):
+        raise FileValidationError(
+            f"File content does not match its '{ext}' extension (failed signature check)."
+        )
+
+
 def validate_size(size_bytes: int) -> None:
     settings = get_settings()
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024

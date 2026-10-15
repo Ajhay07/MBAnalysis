@@ -10,6 +10,11 @@ from app.routers import drawings, analyses, boms, procurement, calculations, das
 
 settings = get_settings()
 
+# Documented path: run `alembic upgrade head` before starting the app.
+# create_all() below remains only as a dev convenience fallback so a fresh
+# checkout still boots if migrations haven't been run; it is a no-op once
+# alembic has already created the tables (create_all never drops/alters
+# existing tables), so it never fights with migration-managed schemas.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Engineering Drawing Intelligence & BOM System")

@@ -6,6 +6,24 @@ import pandas as pd
 
 from app.models.models import Bom, Drawing
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def neutralize_formula(value):
+    """Defuses spreadsheet formula injection: a cell value beginning with
+    =,+,-,@ (or tab/CR) is interpreted as a formula by Excel/LibreOffice/Sheets
+    when the exported CSV/XLSX is opened. Prefix with a single quote so it is
+    treated as plain text, matching the standard CSV-injection mitigation."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    return df.map(neutralize_formula)
+
 
 def bom_export_filename(drawing: Drawing, ext: str) -> str:
     safe_num = (drawing.drawing_number or "DRAWING").replace(" ", "_")
@@ -53,12 +71,12 @@ def material_summary_dataframe(bom: Bom) -> pd.DataFrame:
 
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     buf = io.StringIO()
-    df.to_csv(buf, index=False)
+    sanitize_dataframe(df).to_csv(buf, index=False)
     return buf.getvalue().encode("utf-8")
 
 
 def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Sheet1")
+        sanitize_dataframe(df).to_excel(writer, index=False, sheet_name="Sheet1")
     return buf.getvalue()

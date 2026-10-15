@@ -13,6 +13,7 @@ from app.schemas.api import DrawingOut, AnalysisOut
 from app.services.analysis_pipeline import run_analysis, drawing_abspath
 from app.services.file_validation import (
     FileValidationError, validate_extension, validate_size, build_stored_path,
+    validate_content_matches_extension,
 )
 
 router = APIRouter(prefix="/api/drawings", tags=["drawings"])
@@ -31,6 +32,7 @@ async def upload_drawing(
         ext = validate_extension(file.filename)
         contents = await file.read()
         validate_size(len(contents))
+        validate_content_matches_extension(ext, contents[:16])
         stored_name, abs_path = build_stored_path(settings.UPLOAD_DIR, file.filename)
     except FileValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

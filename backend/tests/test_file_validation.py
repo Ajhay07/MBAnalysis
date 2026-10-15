@@ -5,6 +5,7 @@ import pytest
 
 from app.services.file_validation import (
     sanitize_filename, validate_extension, validate_size, build_stored_path, FileValidationError,
+    validate_content_matches_extension,
 )
 
 
@@ -42,3 +43,22 @@ def test_build_stored_path_stays_inside_upload_dir():
         stored_name, abs_path = build_stored_path(tmp, "../../etc/passwd.pdf")
         assert os.path.abspath(tmp) in abs_path
         assert ".." not in stored_name
+
+
+def test_validate_content_matches_extension_accepts_real_pdf():
+    validate_content_matches_extension(".pdf", b"%PDF-1.7\n...")
+
+
+def test_validate_content_matches_extension_accepts_real_png():
+    validate_content_matches_extension(".png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00")
+
+
+def test_validate_content_matches_extension_rejects_spoofed_mime():
+    # An executable renamed to look like a PDF should fail the signature check.
+    with pytest.raises(FileValidationError):
+        validate_content_matches_extension(".pdf", b"MZ\x90\x00\x03\x00\x00\x00")
+
+
+def test_validate_content_matches_extension_rejects_script_as_image():
+    with pytest.raises(FileValidationError):
+        validate_content_matches_extension(".png", b"<script>alert(1)</script>")
