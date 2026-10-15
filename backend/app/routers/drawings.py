@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_role
 from app.config import get_settings
 from app.database import get_db
-from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User
+from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User, Job
 from app.schemas.api import DrawingOut, AnalysisOut
 from app.services.analysis_pipeline import run_analysis, drawing_abspath, page_preview_path, PdfProcessingError
 from app.services.file_validation import (
@@ -145,7 +145,55 @@ def analyze_drawing(drawing_id: str, db: Session = Depends(get_db),
         # run_analysis already marked the Drawing Failed with this reason and committed it;
         # surface it as a clean 422 rather than an unhandled 500.
         raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        # Provider auth/transient failures (and any other pipeline exception) are already
+        # recorded on the Drawing/Job as Failed with a reason - surface cleanly, never a 500.
+        raise HTTPException(status_code=422, detail=str(exc))
     return analysis
+
+
+@router.post("/{drawing_id}/reprocess", response_model=AnalysisOut)
+def reprocess_drawing(drawing_id: str, db: Session = Depends(get_db),
+                       current_user: User = Depends(editor)):
+    """Retries analysis for a drawing after a failure (or to re-run it fresh). Always re-invokes
+    the real pipeline against this drawing's own file - never substitutes demo/seeded content,
+    even for a drawing whose previous attempt failed. Increments retry_count on the new Job row."""
+    drawing = db.query(Drawing).get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "Drawing not found")
+    prior_retries = db.query(Job).filter(Job.drawing_id == drawing_id).count()
+    try:
+        analysis = run_analysis(db, drawing, actor=current_user.email, retry_count=prior_retries)
+    except PdfProcessingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return analysis
+
+
+@router.get("/{drawing_id}/jobs")
+def list_drawing_jobs(drawing_id: str, db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    """Processing-state history for a drawing: stage, retry_count, failure_reason per run, so
+    the UI can show a status badge / processing-details panel."""
+    drawing = db.query(Drawing).get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "Drawing not found")
+    jobs = db.query(Job).filter(Job.drawing_id == drawing_id).order_by(Job.created_at.desc()).all()
+    return [
+        {
+            "id": j.id,
+            "job_type": j.job_type,
+            "status": j.status,
+            "stage": j.stage.value if hasattr(j.stage, "value") else j.stage,
+            "retry_count": j.retry_count,
+            "failure_reason": j.failure_reason,
+            "started_at": j.started_at,
+            "completed_at": j.completed_at,
+            "analysis_id": j.analysis_id,
+        }
+        for j in jobs
+    ]
 
 
 @router.get("/{drawing_id}/pages/{page_number}/preview")

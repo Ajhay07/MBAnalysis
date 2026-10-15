@@ -19,6 +19,9 @@ class DrawingOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     error_message: str | None = None
+    job_stage: str | None = None
+    job_retry_count: int | None = None
+    job_failure_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

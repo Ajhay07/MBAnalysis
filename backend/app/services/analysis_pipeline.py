@@ -15,9 +15,12 @@ try:
 except Exception:  # pragma: no cover
     fitz = None
 
+from datetime import datetime
+
 from app.config import get_settings
-from app.models.models import Analysis, Component, Drawing, DrawingStatus, AuditLog, Job
+from app.models.models import Analysis, Component, Drawing, DrawingStatus, AuditLog, Job, JobStage
 from app.providers import get_provider
+from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
 from app.schemas.analysis import AnalysisResult
 from app.services.classification import classify_component
 from app.services.ocr import run_ocr
@@ -146,18 +149,37 @@ def _persist_result(
     return components
 
 
-def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analysis:
+def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_count: int = 0) -> Analysis:
     """Full pipeline: OCR -> AI provider (OpenAI vision or demo) -> persist versioned analysis
     with components. Never substitutes seeded demo content for a real drawing - the provider
     is invoked fresh against this drawing's own file every time.
 
     Multi-page PDFs are rasterized page by page (embedded text is also extracted per page) and
     each page is fed through OCR + the provider independently, with every resulting component's
-    source_page set to that page's true physical page number."""
-    job = Job(drawing_id=drawing.id, job_type="analysis", status="Running")
+    source_page set to that page's true physical page number.
+
+    Every run is tracked by a Job row (stage/retry_count/failure_reason/started_at/completed_at)
+    so the pipeline's progress and any failure are fully observable and never leave a job stuck
+    in "processing" forever - every exit path (success or any failure) sets a terminal stage and
+    commits before returning/raising."""
+    job = Job(drawing_id=drawing.id, job_type="analysis", status="Running",
+              stage=JobStage.QUEUED, retry_count=retry_count, started_at=datetime.utcnow())
     db.add(job)
     drawing.status = DrawingStatus.PROCESSING
+    drawing.error_message = None
     db.commit()
+
+    def _fail(reason: str):
+        drawing.status = DrawingStatus.FAILED
+        drawing.error_message = reason
+        job.status = "Failed"
+        job.stage = JobStage.FAILED
+        job.failure_reason = reason
+        job.last_error = reason
+        job.error_message = reason
+        job.completed_at = datetime.utcnow()
+        job.finished_at = job.completed_at
+        db.commit()
 
     try:
         path = drawing_abspath(drawing)
@@ -172,10 +194,15 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analys
         provider_name = provider.name
         pending_components: list = []  # list of (AnalysisResult, page_number)
 
+        job.stage = JobStage.EXTRACTING_PAGES
+        db.commit()
+
         if ext == ".pdf":
             pages = rasterize_pdf_pages(path, drawing)
             for page_number, image, embedded_text in pages:
                 ocr_text = embedded_text
+                job.stage = JobStage.OCR
+                db.commit()
                 if image is not None:
                     ocr_result = run_ocr(image)
                     # Scanned pages have no embedded text; OCR output fills the gap. When both
@@ -184,11 +211,17 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analys
                     if ocr_result.text and ocr_result.text.strip() not in (embedded_text or ""):
                         ocr_text = (embedded_text + "\n" + ocr_result.text).strip() if embedded_text else ocr_result.text
 
-                page_result = provider.analyze(
-                    image_path=page_preview_path(drawing, page_number),
-                    ocr_text=ocr_text,
-                    drawing_number=drawing.drawing_number,
-                )
+                job.stage = JobStage.VISION_ANALYSIS
+                db.commit()
+                try:
+                    page_result = provider.analyze(
+                        image_path=page_preview_path(drawing, page_number),
+                        ocr_text=ocr_text,
+                        drawing_number=drawing.drawing_number,
+                    )
+                except (ProviderAuthError, ProviderTransientError) as exc:
+                    _fail(str(exc))
+                    raise
                 if title_block is None:
                     title_block = page_result.title_block
                 all_dimensions.extend(
@@ -205,14 +238,22 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analys
         else:
             image = _load_image_array(path)
             ocr_text = ""
+            job.stage = JobStage.OCR
+            db.commit()
             if image is not None:
                 ocr_result = run_ocr(image)
                 ocr_text = ocr_result.text
 
-            result = provider.analyze(
-                image_path=path, ocr_text=ocr_text,
-                drawing_number=drawing.drawing_number,
-            )
+            job.stage = JobStage.VISION_ANALYSIS
+            db.commit()
+            try:
+                result = provider.analyze(
+                    image_path=path, ocr_text=ocr_text,
+                    drawing_number=drawing.drawing_number,
+                )
+            except (ProviderAuthError, ProviderTransientError) as exc:
+                _fail(str(exc))
+                raise
             title_block = result.title_block
             all_dimensions = [d.model_dump() for d in result.dimensions]
             all_materials = list(result.materials)
@@ -221,6 +262,9 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analys
             pending_components.append((result, None))
 
         overall_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+        job.stage = JobStage.PERSISTING
+        db.commit()
 
         version = db.query(Analysis).filter(Analysis.drawing_id == drawing.id).count() + 1
         analysis = Analysis(
@@ -243,23 +287,24 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system") -> Analys
         needs_review = any(c.confidence < 0.6 for c in all_components) or not all_components
         drawing.status = DrawingStatus.NEEDS_REVIEW if needs_review else DrawingStatus.REVIEWED
         job.status = "Done"
+        job.stage = JobStage.NEEDS_REVIEW if needs_review else JobStage.REVIEWED
+        job.analysis_id = None  # set below once analysis.id is known post-flush
+        job.completed_at = datetime.utcnow()
+        job.finished_at = job.completed_at
         db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="analyzed",
                          details={"provider": provider_name, "analysis_id": analysis.id},
                          actor=actor))
         db.commit()
         db.refresh(analysis)
+        job.analysis_id = analysis.id
+        db.commit()
         return analysis
     except PdfProcessingError as exc:
-        drawing.status = DrawingStatus.FAILED
-        drawing.error_message = str(exc)
-        job.status = "Failed"
-        job.error_message = str(exc)
-        db.commit()
+        _fail(str(exc))
+        raise
+    except (ProviderAuthError, ProviderTransientError):
+        # Already recorded by _fail() at the point of failure above.
         raise
     except Exception as exc:
-        drawing.status = DrawingStatus.FAILED
-        drawing.error_message = str(exc)
-        job.status = "Failed"
-        job.error_message = str(exc)
-        db.commit()
+        _fail(str(exc))
         raise

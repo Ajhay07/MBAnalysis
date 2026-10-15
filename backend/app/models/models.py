@@ -69,6 +69,29 @@ class Drawing(Base):
 
     analyses = relationship("Analysis", back_populates="drawing", cascade="all, delete-orphan")
     boms = relationship("Bom", back_populates="drawing", cascade="all, delete-orphan")
+    jobs = relationship("Job", back_populates="drawing", cascade="all, delete-orphan",
+                         order_by="Job.created_at")
+
+    @property
+    def _latest_job(self):
+        return max(self.jobs, key=lambda j: j.created_at, default=None) if self.jobs else None
+
+    @property
+    def job_stage(self) -> str | None:
+        job = self._latest_job
+        if not job:
+            return None
+        return job.stage.value if hasattr(job.stage, "value") else job.stage
+
+    @property
+    def job_retry_count(self) -> int | None:
+        job = self._latest_job
+        return job.retry_count if job else None
+
+    @property
+    def job_failure_reason(self) -> str | None:
+        job = self._latest_job
+        return job.failure_reason if job else None
 
 
 class Analysis(Base):
@@ -196,13 +219,35 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class JobStage(str, enum.Enum):
+    QUEUED = "queued"
+    EXTRACTING_PAGES = "extracting_pages"
+    OCR = "ocr"
+    VISION_ANALYSIS = "vision_analysis"
+    PERSISTING = "persisting"
+    NEEDS_REVIEW = "needs_review"
+    REVIEWED = "reviewed"
+    BOM_GENERATED = "bom_generated"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(String, primary_key=True, default=gen_id)
     drawing_id = Column(String, ForeignKey("drawings.id"), nullable=False)
+    analysis_id = Column(String, ForeignKey("analyses.id"), nullable=True)
     job_type = Column(String, default="analysis")
     status = Column(String, default="Pending")  # Pending/Running/Done/Failed
+    stage = Column(SAEnum(JobStage), default=JobStage.QUEUED, nullable=False)
+    retry_count = Column(Integer, default=0, nullable=False)
+    last_error = Column(Text, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+
+    drawing = relationship("Drawing", back_populates="jobs")
