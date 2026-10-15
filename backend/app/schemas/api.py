@@ -78,6 +78,7 @@ class BomLineItemOut(BaseModel):
     description: str
     category: str
     quantity: float
+    total_quantity: float | None = None
     material: str
     make_buy: str
     unit_cost: float | None = None
@@ -107,6 +108,7 @@ class BomLineItemUpdate(BaseModel):
     material: str | None = None
     make_buy: str | None = None
     unit_cost: float | None = None
+    parent_line_item_id: str | None = None
 
 
 class SupplierIn(BaseModel):

@@ -7,6 +7,7 @@ from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.models.models import Bom, BomLineItem, Drawing, AuditLog, User
 from app.schemas.api import BomOut, BomLineItemUpdate
+from app.services.bom_service import would_create_cycle, recompute_rollup, build_bom_tree
 from app.services.export_service import (
     bom_to_dataframe, purchase_list_dataframe, material_summary_dataframe,
     dataframe_to_csv_bytes, dataframe_to_excel_bytes,
@@ -39,13 +40,35 @@ def update_line_item(line_item_id: str, payload: BomLineItemUpdate, db: Session 
     line = db.query(BomLineItem).get(line_item_id)
     if not line:
         raise HTTPException(404, "Line item not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "parent_line_item_id" in updates:
+        new_parent_id = updates["parent_line_item_id"]
+        if new_parent_id is not None:
+            parent = db.query(BomLineItem).filter(
+                BomLineItem.id == new_parent_id, BomLineItem.bom_id == line.bom_id
+            ).first()
+            if parent is None:
+                raise HTTPException(400, "Parent line item not found in this BOM")
+        if would_create_cycle(db, line.bom_id, line.id, new_parent_id):
+            raise HTTPException(400, "This parent assignment would create a circular BOM reference")
+    for field, value in updates.items():
         setattr(line, field, value)
     db.add(AuditLog(entity_type="bom_line_item", entity_id=line_item_id, action="updated",
-                     details=payload.model_dump(exclude_unset=True), actor=current_user.email))
+                     details=updates, actor=current_user.email))
+    db.flush()
+    recompute_rollup(db, line.bom_id)
     db.commit()
     db.refresh(line)
     return {"ok": True}
+
+
+@router.get("/{bom_id}/tree")
+def get_bom_tree(bom_id: str, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    bom = db.query(Bom).get(bom_id)
+    if not bom:
+        raise HTTPException(404, "BOM not found")
+    return {"bom_id": bom.id, "nodes": build_bom_tree(db, bom)}
 
 
 @router.post("/{bom_id}/approve")

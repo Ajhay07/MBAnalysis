@@ -143,6 +143,11 @@ class BomLineItem(Base):
     make_buy = Column(SAEnum(MakeBuy), default=MakeBuy.REVIEW)
     unit_cost = Column(Float, nullable=True)
     supplier_id = Column(String, ForeignKey("suppliers.id"), nullable=True)
+    # `quantity` is qty-per-assembly (how many go into the direct parent, or the
+    # top-level count if there is no parent). `total_quantity` is the rolled-up
+    # quantity required overall across the nested assembly chain; left null when
+    # the chain's multiplicity cannot be determined.
+    total_quantity = Column(Float, nullable=True)
 
     bom = relationship("Bom", back_populates="line_items")
 

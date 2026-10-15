@@ -5,6 +5,96 @@ from sqlalchemy.orm import Session
 from app.models.models import Analysis, Bom, BomLineItem, Drawing, DrawingStatus, AuditLog
 
 
+class CyclicBomReferenceError(ValueError):
+    """Raised when a parent_line_item_id assignment would create a cycle."""
+
+
+def would_create_cycle(db: Session, bom_id: str, item_id: str, new_parent_id: str | None) -> bool:
+    """Walks up the parent chain starting at `new_parent_id`; if it ever reaches
+    `item_id`, assigning new_parent_id as item_id's parent would create a cycle
+    (or make the item its own parent)."""
+    if new_parent_id is None:
+        return False
+    if new_parent_id == item_id:
+        return True
+    seen: set[str] = set()
+    current_id = new_parent_id
+    while current_id:
+        if current_id in seen:
+            # Pre-existing cycle in stored data; treat as a cycle rather than loop forever.
+            return True
+        seen.add(current_id)
+        if current_id == item_id:
+            return True
+        current = db.query(BomLineItem).filter(
+            BomLineItem.id == current_id, BomLineItem.bom_id == bom_id
+        ).first()
+        if current is None:
+            return False
+        current_id = current.parent_line_item_id
+    return False
+
+
+def recompute_rollup(db: Session, bom_id: str) -> None:
+    """Recomputes total_quantity for every line item in a BOM: qty-per-assembly
+    multiplied through the chain of parent qty-per-assembly values. Left null for
+    any item whose own quantity or any ancestor's quantity is unknown (None), since
+    guessing a multiplier would be worse than flagging it for review."""
+    items = db.query(BomLineItem).filter(BomLineItem.bom_id == bom_id).all()
+    by_id = {item.id: item for item in items}
+
+    memo: dict[str, float | None] = {}
+
+    def resolve(item_id: str, trail: set[str]) -> float | None:
+        if item_id in memo:
+            return memo[item_id]
+        if item_id in trail:
+            memo[item_id] = None  # cycle guard; should not normally happen post-validation
+            return None
+        item = by_id.get(item_id)
+        if item is None or item.quantity is None:
+            memo[item_id] = None
+            return None
+        if not item.parent_line_item_id or item.parent_line_item_id not in by_id:
+            total = float(item.quantity)
+        else:
+            parent_total = resolve(item.parent_line_item_id, trail | {item_id})
+            total = None if parent_total is None else float(item.quantity) * parent_total
+        memo[item_id] = total
+        return total
+
+    for item in items:
+        item.total_quantity = resolve(item.id, set())
+    db.commit()
+
+
+def build_bom_tree(db: Session, bom: Bom) -> list[dict]:
+    """Returns the BOM's line items as a nested tree (list of top-level nodes,
+    each with a `children` list)."""
+    items = bom.line_items
+    by_parent: dict[str | None, list[BomLineItem]] = {}
+    for item in items:
+        by_parent.setdefault(item.parent_line_item_id, []).append(item)
+
+    def node(item: BomLineItem) -> dict:
+        return {
+            "id": item.id,
+            "part_number": item.part_number,
+            "description": item.description,
+            "category": item.category,
+            "quantity": item.quantity,
+            "total_quantity": item.total_quantity,
+            "material": item.material,
+            "make_buy": item.make_buy.value if hasattr(item.make_buy, "value") else item.make_buy,
+            "unit_cost": item.unit_cost,
+            "parent_line_item_id": item.parent_line_item_id,
+            "component_id": item.component_id,
+            "children": [node(child) for child in by_parent.get(item.id, [])],
+        }
+
+    return [node(item) for item in by_parent.get(None, [])]
+
+
 def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "system") -> Bom:
     """Builds a new BOM (versioned) from a persisted analysis's components.
     Flat with parent_line_item_id preserved for future multi-level UI."""
@@ -41,6 +131,9 @@ def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "sy
     drawing = db.query(Drawing).get(analysis.drawing_id)
     if drawing:
         drawing.status = DrawingStatus.BOM_GENERATED
+
+    db.flush()
+    recompute_rollup(db, bom.id)
 
     db.add(AuditLog(entity_type="bom", entity_id=bom.id, action="generated",
                      details={"analysis_id": analysis.id, "line_count": len(analysis.components)},

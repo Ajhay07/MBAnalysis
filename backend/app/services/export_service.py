@@ -40,15 +40,44 @@ def material_summary_filename(drawing: Drawing, ext: str) -> str:
     return f"{safe_num}_Rev{drawing.revision}_MaterialSummary.{ext}"
 
 
+def _bom_levels(bom: Bom) -> dict[str, int]:
+    """Depth of each line item: 0 for top-level, incrementing per nesting level.
+    Guards against malformed/cyclic parent chains instead of looping forever."""
+    by_id = {li.id: li for li in bom.line_items}
+    levels: dict[str, int] = {}
+
+    def depth(item_id: str, trail: set[str]) -> int:
+        if item_id in levels:
+            return levels[item_id]
+        if item_id in trail:
+            return 0
+        item = by_id.get(item_id)
+        if item is None or not item.parent_line_item_id or item.parent_line_item_id not in by_id:
+            levels[item_id] = 0
+            return 0
+        d = 1 + depth(item.parent_line_item_id, trail | {item_id})
+        levels[item_id] = d
+        return d
+
+    for li in bom.line_items:
+        depth(li.id, set())
+    return levels
+
+
 def bom_to_dataframe(bom: Bom) -> pd.DataFrame:
+    levels = _bom_levels(bom)
+    part_numbers = {li.id: li.part_number for li in bom.line_items}
     rows = [{
+        "Level": levels.get(li.id, 0),
         "Part Number": li.part_number,
-        "Description": li.description,
+        "Description": ("  " * levels.get(li.id, 0)) + li.description,
         "Category": li.category,
         "Quantity": li.quantity,
+        "Total Quantity": li.total_quantity,
         "Material": li.material,
         "Make/Buy": li.make_buy.value if hasattr(li.make_buy, "value") else li.make_buy,
         "Unit Cost": li.unit_cost,
+        "Parent Item Number": part_numbers.get(li.parent_line_item_id, "") if li.parent_line_item_id else "",
         "Parent Line Item": li.parent_line_item_id or "",
     } for li in bom.line_items]
     return pd.DataFrame(rows)
