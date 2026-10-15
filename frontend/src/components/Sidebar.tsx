@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, FolderOpen, ClipboardList, ShoppingCart, Calculator, CheckSquare,
+  LayoutDashboard, FolderOpen, ClipboardList, ShoppingCart, Calculator, CheckSquare, LogOut,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -16,6 +17,7 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
   return (
     <aside className="w-60 shrink-0 border-r border-border bg-white flex flex-col">
       <div className="h-16 flex items-center px-5 border-b border-border">
@@ -47,6 +49,23 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      {user && (
+        <div className="px-5 py-3 border-t border-border">
+          <div className="text-xs font-medium text-graphite truncate" title={user.email}>
+            {user.email}
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[11px] uppercase tracking-wide text-steel-light">{user.role}</span>
+            <button
+              onClick={logout}
+              className="flex items-center gap-1 text-[11px] text-steel hover:text-accent-dark"
+              title="Log out"
+            >
+              <LogOut size={13} /> Log out
+            </button>
+          </div>
+        </div>
+      )}
       <div className="px-5 py-4 border-t border-border text-[11px] text-steel-light">
         Engineering Drawing Intelligence &amp; BOM System v0.1
       </div>

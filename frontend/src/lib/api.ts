@@ -1,11 +1,28 @@
 const BASE = "";
 
+// Auth token transport is an httpOnly cookie set by the backend on login (see backend/app/auth.py
+// for the full rationale) - the browser attaches it automatically on every same-origin request
+// via the Next.js rewrite proxy, so no Authorization header needs adding here. The one thing this
+// client does need to handle is a 401: it means "not logged in (or session expired)", and every
+// page in the app assumes a logged-in user, so we bounce to /login rather than let each page
+// handle it individually. /api/auth/me and /api/auth/login are exempt - AuthContext calls those
+// itself to *determine* auth state, and a 401 there is an expected, handled outcome, not a reason
+// to redirect.
+function isAuthProbePath(path: string): boolean {
+  return path.startsWith("/api/auth/me") || path.startsWith("/api/auth/login");
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { ...(init?.headers || {}) },
     cache: "no-store",
   });
+  if (res.status === 401 && !isAuthProbePath(path)) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Request failed ${res.status}: ${text}`);
@@ -101,8 +118,24 @@ export interface DashboardMetrics {
   recent_activity: { entity_type: string; entity_id: string; action: string; created_at: string }[];
 }
 
+export interface CurrentUser {
+  id: string;
+  email: string;
+  role: "admin" | "engineer" | "viewer";
+  is_active: boolean;
+  created_at: string;
+}
+
 export const api = {
   health: () => request<{ status: string; ai_mode: string }>("/api/health"),
+
+  login: (email: string, password: string) =>
+    request<{ access_token: string; token_type: string; expires_in_minutes: number }>(
+      "/api/auth/login",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }
+    ),
+  logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  me: () => request<CurrentUser>("/api/auth/me"),
   dashboardMetrics: () => request<DashboardMetrics>("/api/dashboard/metrics"),
   aiStatus: () => request<{ mode: string; vision_model: string }>("/api/dashboard/ai-status"),
 
