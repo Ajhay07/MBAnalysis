@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = ".pdf,.png,.jpg,.jpeg,.tif,.tiff"
     ENVIRONMENT: str = "development"
     UPLOAD_DIR: str = "./uploads"
+    # Comma separated list of origins allowed to call the API (CORS). Defaults to the local
+    # Next.js dev server; set to the deployed frontend's origin(s) in production via env var.
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     # --- Auth ---
     JWT_SECRET: str = ""
@@ -35,6 +38,10 @@ class Settings(BaseSettings):
     OCR_PREPROCESS_DESKEW: bool = False
     OCR_PREPROCESS_CLAHE: bool = True
     OCR_PREPROCESS_DENOISE: bool = False
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
     def allowed_extensions_list(self) -> list[str]:
