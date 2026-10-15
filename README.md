@@ -18,13 +18,18 @@ AI provider's output accuracy against a sample of your own real drawings.
     providers/      DrawingAnalysisProvider interface: OpenAIVisionProvider, DemoProvider
     services/       calculations, OCR/preprocessing, classification, BOM generation, exports,
                     file validation/security, the analysis pipeline
-    routers/        FastAPI route modules (drawings, analyses, boms, procurement, calculations,
-                    dashboard, review, demo)
-  tests/            pytest suite (29 tests)
+    routers/        FastAPI route modules (auth, drawings, analyses, boms, procurement,
+                    calculations, dashboard, review, demo)
+    auth.py         get_current_user / require_role() FastAPI dependencies
+    security.py     password hashing (passlib/bcrypt) + JWT issuing/verification (python-jose)
+  tests/            pytest suite (49 tests)
+  create_admin.py   bootstraps the first admin user from ADMIN_EMAIL/ADMIN_PASSWORD
   seed.py           seeds 3 demo projects into the DB
   generate_seed_assets.py  generates the SVG sample drawings in seed_assets/
-  alembic/          migration scaffold (SQLite works out of the box via create_all(); use
-                    Alembic when you move to Postgres - see below)
+  alembic/          versioned migrations - `alembic upgrade head` is the documented schema path
+                    (see "Authentication Setup" below); create_all() remains only as a dev
+                    convenience fallback so a fresh checkout still boots if migrations haven't
+                    been run yet
 
 /frontend  Next.js 14 (App Router) + TypeScript + Tailwind + Recharts + lucide-react
   src/app/            dashboard, drawing library, drawing viewer/workspace, review center,
@@ -85,9 +90,11 @@ cd backend
 .\venv\Scripts\Activate.ps1
 pytest -q
 ```
-29/29 tests passing at time of writing (file validation, calculation engine exactness,
+49/49 tests passing at time of writing (file validation, calculation engine exactness,
 Make/Buy/Review classification, BOM generation from a seeded analysis, demo-data isolation,
-AI-provider-missing-key fallback).
+AI-provider-missing-key fallback, plus `tests/test_auth.py`: login success/failure, token
+validation (missing/invalid/expired), protected-route 401s, role-gated 403s, and that the audit
+trail records the real authenticated actor).
 
 ### Frontend
 ```powershell
@@ -128,6 +135,87 @@ Without a key, any "Run Analysis" on a real upload falls back to `DemoProvider`'
 placeholder result (clearly labeled, low confidence, routed to the review queue) instead of
 fabricating realistic-looking data.
 
+## Authentication Setup
+
+Real authentication/authorization is implemented: email+password login, JWT sessions, three
+roles (admin/engineer/viewer), and every state-changing endpoint (plus all reads) requires a
+logged-in user. Demo mode does **not** bypass auth — loading/resetting demo data still requires
+an admin/engineer session.
+
+### 1. Run migrations
+
+```powershell
+cd backend
+.\venv\Scripts\Activate.ps1
+alembic upgrade head
+```
+This creates/updates all tables including the new `users` table (`backend/alembic/versions/
+7787f60a7a82_add_users_table.py`). Verified against a genuinely empty SQLite DB (upgrade,
+downgrade, re-upgrade). If your DB predates Alembic (tables already exist from the old
+`create_all()`-only path), stamp the baseline first: `alembic stamp 3dc7c2a9f404`, then
+`alembic upgrade head` to add just the `users` table.
+
+### 2. Set required env vars and bootstrap the first admin
+
+In `backend/.env` (copy from `.env.example` if you haven't):
+```
+JWT_SECRET=<output of: python -c "import secrets; print(secrets.token_hex(32))">
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=<a real password, not committed anywhere>
+```
+`JWT_SECRET` can be left blank only while `ENVIRONMENT=development` — a random secret is then
+generated per process start (every restart invalidates all sessions, so set a real one for
+anything beyond quick local poking). In any other `ENVIRONMENT`, the app refuses to start
+without it (`app/security.py:get_jwt_secret`).
+
+Then, once:
+```powershell
+python create_admin.py
+```
+Creates the admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Refuses to run again once any user
+exists, so it can't silently reset a password — create additional users (engineer/viewer) from
+an authenticated admin session via the API; there's no bulk-create endpoint yet.
+
+### 3. Log in
+
+Start the backend and frontend as usual, open http://localhost:3000, and you'll be redirected
+to `/login`. Enter the admin email/password from step 2.
+
+### How it works
+
+- **Password hashing**: `passlib[bcrypt]`. Passwords are never logged or stored in plaintext.
+  Pin note: `bcrypt==4.0.1` is required alongside `passlib==1.7.4` — newer bcrypt removed an
+  attribute passlib's backend probes, which breaks hashing outright (see requirements.txt).
+- **JWT**: `python-jose`, `HS256`, signed with `JWT_SECRET`. Access tokens expire after 240
+  minutes (4 hours — long enough for a working session, short enough that a stale/leaked token
+  doesn't stay valid indefinitely). There is no refresh-token flow: when a token expires, you
+  simply log in again (`POST /api/auth/login`).
+- **Token storage/transport**: an **httpOnly cookie** set by the backend on login, not
+  `localStorage`. Chosen because the frontend's existing API client
+  (`frontend/src/lib/api.ts`) already calls the backend through Next.js's `rewrites()` proxy, so
+  every browser request already lands on the *same origin* — the proxy forwards `Set-Cookie`
+  transparently, the browser attaches the cookie automatically on every subsequent request, and
+  page JavaScript never has read access to the token (so an XSS bug can't exfiltrate it the way
+  it could with `localStorage`). Verified end-to-end (login through the proxy -> cookie set ->
+  subsequent proxied request authenticated -> logout clears it). The tradeoff: a cookie-based
+  session is less convenient for a non-browser API client, so the same endpoints also accept a
+  plain `Authorization: Bearer <token>` header (what the backend test suite uses).
+- **Logout** (`POST /api/auth/logout`) just clears the cookie — JWTs are stateless, so there's
+  no server-side session to revoke. A token copied out of the cookie before logout stays valid
+  until it expires; this is the accepted tradeoff of the simple re-login-on-expiry design, not
+  a bug.
+- **Roles**: `admin` and `engineer` can create/upload/edit/delete/approve/reject everything
+  (upload, reprocess, delete drawings, edit components/BOM line items, approve/reject BOM or
+  analysis, supplier/catalog CRUD, demo load/reset). `viewer` is read-only — it can view every
+  page, run the (non-persisted) calculation tools, and export files, but every write/approval
+  endpoint returns 403. This is a stricter reading of "viewer: read-only" than just gating BOM
+  approval and review verification — all mutation across the app is admin/engineer-only, with
+  reads open to any logged-in user.
+- **Audit trail**: every `AuditLog` row written by an authenticated action now records the real
+  user's email as `actor` (previously hardcoded to `"system"`). The `"system"` default remains
+  only as a fallback for anything invoked outside a request context (e.g. running `seed.py`
+  directly from the command line rather than through `POST /api/demo/load`).
+
 ## Known limitations
 
 - PDF pages are not rasterized for OpenCV preprocessing/OCR in this build (image formats — PNG/
@@ -137,10 +225,13 @@ fabricating realistic-looking data.
 - Multi-page drawings are supported in the data model (`source_page`) but the viewer UI does not
   yet page through multi-page PDFs.
 - Supplier/catalog data has no real pricing seeded (by design — no fabricated prices).
-- No authentication/multi-user support; this is a single-tenant local tool as scoped.
+- Authentication is email+password only — no SSO/OAuth, no password reset flow, no refresh
+  tokens (see "Authentication Setup" above for what is implemented).
 - Background jobs are synchronous-in-request rather than a true async queue (see above).
 - Frontend BOM editing UI shows a flat list; the data model supports parent/child nesting
-  (`parent_line_item_id`) but the UI does not yet render an indented tree.
+  (`parent_line_item_id`/`parent_component_id`) and BOM generation preserves the relationship,
+  but there is no UI yet to author or visualize the hierarchy (hierarchical BOM) beyond this
+  flat list.
 - This has not been validated against real engineering drawings — only synthetic demo drawings.
 
 ## Security basics implemented
@@ -153,3 +244,5 @@ fabricating realistic-looking data.
   filename for download/display.
 - `.env.example` ships with no real secrets.
 - No real purchase orders are ever placed — procurement module only classifies/exports.
+- Real authentication/authorization (hashed passwords, JWT sessions, role-gated actions) on
+  every route — see "Authentication Setup" above.
