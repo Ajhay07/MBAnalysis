@@ -175,6 +175,14 @@ def seed_demo_data(db, actor: str = "system") -> int:
                 description=comp.description, category=comp.category, quantity=comp.quantity,
                 material=comp.material, make_buy=comp.make_buy,
             ))
+        db.flush()
+        # These seeded BOMs are flat (no parent_line_item_id), but recompute_rollup still needs
+        # to run so each line's total_quantity (qty-per-assembly rolled up) is populated rather
+        # than left null - inventory availability treats a null total_quantity as "rollup
+        # undetermined" (REVIEW_REQUIRED), which would otherwise make every seeded line review-
+        # required regardless of actual stock.
+        from app.services.bom_service import recompute_rollup
+        recompute_rollup(db, bom.id)
 
         db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="demo_seeded", details={},
                          actor=actor))
