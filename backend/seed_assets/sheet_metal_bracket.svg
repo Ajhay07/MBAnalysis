@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+    <rect width="1000" height="700" fill="#fafafa"/>
+    <rect x="10" y="10" width="980" height="680" fill="none" stroke="#333" stroke-width="2"/>
+    
+    <path d="M250 250 H550 V300 H400 V450 H250 Z" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="280" cy="420" r="10" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="520" cy="280" r="10" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="250" y1="230" x2="550" y2="230"/>
+      <line x1="250" y1="225" x2="250" y2="235"/>
+      <line x1="550" y1="225" x2="550" y2="235"/>
+      <text x="388.0" y="224">300.0</text>
+    </g>
+    
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="230" y1="250" x2="230" y2="450"/>
+      <line x1="230" y1="245" x2="230" y2="255"/>
+      <line x1="230" y1="445" x2="230" y2="455"/>
+      <text x="218.0" y="244">200.0</text>
+    </g>
+    
+    
+    
+    <g font-family="Consolas, monospace" font-size="10" stroke="#333" fill="#222">
+      <rect x="740" y="600" width="250" height="90" fill="white" stroke="#333" stroke-width="1.2"/>
+      <line x1="740" y1="625" x2="990" y2="625" stroke="#333"/>
+      <line x1="740" y1="650" x2="990" y2="650" stroke="#333"/>
+      <line x1="890" y1="650" x2="890" y2="690" stroke="#333"/>
+      <text x="748" y="617" font-weight="bold">SHEET METAL BRACKET</text>
+      <text x="748" y="640">DWG NO: BR-3003</text>
+      <text x="748" y="665">REV: C</text>
+      <text x="898" y="665">SCALE: 1:1</text>
+      <text x="748" y="685">UNITS: mm   MATERIAL: SEE BOM</text>
+    </g>
+    
+    </svg>

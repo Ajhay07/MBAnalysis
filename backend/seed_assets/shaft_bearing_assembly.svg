@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+    <rect width="1000" height="700" fill="#fafafa"/>
+    <rect x="10" y="10" width="980" height="680" fill="none" stroke="#333" stroke-width="2"/>
+    
+    <rect x="200" y="320" width="500" height="40" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="260" y="300" width="60" height="80" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="620" y="300" width="60" height="80" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="290" cy="340" r="24" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="650" cy="340" r="24" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="200" y1="280" x2="700" y2="280"/>
+      <line x1="200" y1="275" x2="200" y2="285"/>
+      <line x1="700" y1="275" x2="700" y2="285"/>
+      <text x="438.0" y="274">500.0 +/-0.1</text>
+    </g>
+    
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="180" y1="300" x2="180" y2="380"/>
+      <line x1="180" y1="295" x2="180" y2="305"/>
+      <line x1="180" y1="375" x2="180" y2="385"/>
+      <text x="168.0" y="294">dia 25.0 h7</text>
+    </g>
+    
+    
+    
+    <g font-family="Consolas, monospace" font-size="10" stroke="#333" fill="#222">
+      <rect x="740" y="600" width="250" height="90" fill="white" stroke="#333" stroke-width="1.2"/>
+      <line x1="740" y1="625" x2="990" y2="625" stroke="#333"/>
+      <line x1="740" y1="650" x2="990" y2="650" stroke="#333"/>
+      <line x1="890" y1="650" x2="890" y2="690" stroke="#333"/>
+      <text x="748" y="617" font-weight="bold">SHAFT & BEARING ASSEMBLY</text>
+      <text x="748" y="640">DWG NO: SH-2002</text>
+      <text x="748" y="665">REV: A</text>
+      <text x="898" y="665">SCALE: 1:1</text>
+      <text x="748" y="685">UNITS: mm   MATERIAL: SEE BOM</text>
+    </g>
+    
+    </svg>
