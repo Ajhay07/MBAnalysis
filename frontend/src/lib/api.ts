@@ -88,6 +88,17 @@ export interface Component {
   source_region: Record<string, unknown>;
   source_text: string;
   parent_component_id?: string | null;
+  // Geometry-driven BOM generation fields (see backend bom_candidate_service.py /
+  // analysis_pipeline.py): how this candidate's quantity was determined, what kind of
+  // component it is, its parent assembly's part number (if any), and - when the value is an
+  // engineering assumption rather than evidence read directly off the drawing - a flag plus a
+  // human-readable explanation. Optional because older persisted Components (pre-migration
+  // d4e5f6a7b8c9) may not have these set.
+  quantity_basis?: "explicit_callout" | "counted_feature" | "assumed" | string | null;
+  component_type?: "raw_material" | "purchased" | "manufactured" | "assembly" | string | null;
+  parent_part_number?: string | null;
+  is_assumption?: boolean | null;
+  assumption_text?: string | null;
 }
 
 export interface Analysis {
@@ -226,6 +237,28 @@ export interface Requisition {
   lines: RequisitionLine[];
 }
 
+export interface ReferenceBomTableEntry {
+  page_number: number;
+  matched_headers: string[];
+  bbox: Record<string, number>;
+  raw_text: string;
+  row_count_estimate: number;
+}
+
+export interface ReferenceBomDiscrepancy {
+  reference_row_count_estimate: number;
+  candidate_component_count: number;
+  count_mismatch: boolean;
+  candidate_descriptions_not_found_in_reference_text: string[];
+  candidate_part_numbers_not_found_in_reference_text: string[];
+}
+
+export interface ReferenceBomResponse {
+  detected: boolean;
+  tables: ReferenceBomTableEntry[];
+  discrepancy: ReferenceBomDiscrepancy | null;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -271,6 +304,8 @@ export const api = {
   listAnalyses: (id: string) => request<Analysis[]>(`/api/drawings/${id}/analyses`),
   getPageOcrEvidence: (id: string, pageNumber: number) =>
     request<OcrPageEvidence>(`/api/drawings/${id}/pages/${pageNumber}/ocr`),
+  getReferenceBom: (drawingId: string, analysisId: string) =>
+    request<ReferenceBomResponse>(`/api/drawings/${drawingId}/analyses/${analysisId}/reference-bom`),
 
   getAnalysis: (id: string) => request<Analysis>(`/api/analyses/${id}`),
   updateComponent: (id: string, payload: Partial<Component>) =>

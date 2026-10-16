@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
-import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion } from "@/lib/api";
-import { DemoBadge, StatusBadge, MakeBuyBadge } from "@/components/Badges";
+import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse } from "@/lib/api";
+import { DemoBadge, StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
+import ReferenceBomPanel from "@/components/ReferenceBomPanel";
 
 function OcrOverlay({
   evidence,
@@ -69,6 +70,7 @@ export default function DrawingViewerPage() {
   const [ocrEvidence, setOcrEvidence] = useState<OcrPageEvidence | null>(null);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
+  const [referenceBom, setReferenceBom] = useState<ReferenceBomResponse | null>(null);
 
   const load = useCallback(async () => {
     const d = await api.getDrawing(id);
@@ -97,6 +99,25 @@ export default function DrawingViewerPage() {
   useEffect(() => {
     if (id) load();
   }, [id, load]);
+
+  useEffect(() => {
+    if (!id || !activeAnalysis) {
+      setReferenceBom(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .getReferenceBom(id, activeAnalysis.id)
+      .then((r) => {
+        if (!cancelled) setReferenceBom(r);
+      })
+      .catch(() => {
+        if (!cancelled) setReferenceBom(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, activeAnalysis]);
 
   useEffect(() => {
     if (!showOcrEvidence || !id) return;
@@ -367,6 +388,8 @@ export default function DrawingViewerPage() {
               </div>
             </div>
 
+            {referenceBom && <ReferenceBomPanel reference={referenceBom} />}
+
             <div className="card p-4 mb-4">
               <h2 className="text-sm font-semibold mb-1">
                 Interpreted Component Candidates ({activeAnalysis.components.length})
@@ -382,6 +405,8 @@ export default function DrawingViewerPage() {
                     <div className="flex items-center justify-between mb-1">
                       <div className="font-mono text-xs">{c.part_number || "(no part number)"}</div>
                       <div className="flex items-center gap-2">
+                        <QuantityBasisBadge basis={c.quantity_basis} count={c.quantity} />
+                        <AssumptionNote isAssumption={c.is_assumption} text={c.assumption_text} />
                         <MakeBuyBadge value={c.make_buy} />
                         <span className="text-xs text-steel-light">{(c.confidence * 100).toFixed(0)}% conf.</span>
                       </div>
