@@ -22,9 +22,20 @@ SYSTEM_PROMPT = (
     "\"quantity\": float, \"material\": str, \"grade\": str, \"dimensions\": object, "
     "\"tolerances\": object, \"gear_specs\": object, \"make_buy\": \"Make\"|\"Buy\"|\"Review\", "
     "\"confidence\": float, \"verification_status\": str, \"source_page\": int, "
-    "\"source_region\": object, \"source_text\": str}], \"raw_ocr_text\": str, "
-    "\"overall_confidence\": float}. Never invent precise numeric values you cannot see; use low "
-    "confidence and the Review classification when uncertain."
+    "\"source_region\": object, \"source_text\": str, \"quantity_basis\": "
+    "\"explicit_callout\"|\"counted_feature\"|\"assumed\", \"component_type\": "
+    "\"raw_material\"|\"purchased\"|\"manufactured\"|\"assembly\", \"parent_part_number\": str|null, "
+    "\"is_assumption\": bool, \"assumption_text\": str}], \"raw_ocr_text\": str, "
+    "\"overall_confidence\": float, \"view_types\": [{\"view_type\": "
+    "\"front\"|\"side\"|\"top\"|\"section\"|\"isometric\"|\"unknown\", \"page\": int, "
+    "\"source_region\": object}], \"repeated_features\": [{\"feature_type\": str, \"count\": int, "
+    "\"page\": int, \"source_region\": object, \"source_text\": str, \"is_assumption\": bool, "
+    "\"assumption_text\": str}], \"ambiguities\": [{\"description\": str, \"page\": int, "
+    "\"source_region\": object}], \"missing_info\": [str]}. Never invent precise numeric values you "
+    "cannot see; use low confidence and the Review classification when uncertain. Every component "
+    "and repeated-feature entry MUST have either non-empty source_text evidence or "
+    "is_assumption=true with assumption_text explaining the assumption - entries with neither will "
+    "be rejected."
 )
 
 # Bounded timeout + retry/backoff for transient failures (timeout/rate-limit/connection/server
