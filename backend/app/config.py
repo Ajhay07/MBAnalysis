@@ -7,6 +7,8 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     OPENAI_VISION_MODEL: str = "gpt-4o-mini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
     DATABASE_URL: str = "sqlite:///./mbanalysis.db"
     MAX_UPLOAD_MB: int = 25
     ALLOWED_EXTENSIONS: str = ".pdf,.png,.jpg,.jpeg,.tif,.tiff"
@@ -53,6 +55,10 @@ class Settings(BaseSettings):
 
     @property
     def ai_mode(self) -> str:
+        # Gemini takes precedence over OpenAI when both keys happen to be set (realistically
+        # only one will ever be configured in a given environment) - see app/providers/__init__.py.
+        if self.GEMINI_API_KEY:
+            return "gemini"
         return "openai" if self.OPENAI_API_KEY else "demo"
 
 
