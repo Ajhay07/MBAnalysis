@@ -24,6 +24,7 @@ from app.providers.openai_provider import ProviderAuthError, ProviderTransientEr
 from app.schemas.analysis import AnalysisResult
 from app.services.classification import classify_component
 from app.services.paddle_ocr import run_page_ocr
+from app.services.bom_candidate_service import build_candidate_bom
 
 def _pdf_raster_zoom() -> float:
     """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 288) is what
@@ -124,7 +125,12 @@ def _persist_result(
     page_override, when given, forces source_page to the true physical page the image came
     from (the provider has no way to know this - it only ever sees a single rasterized page)."""
     components = []
-    for comp in result.components:
+    # Use the deterministic bom_candidate_service to merge the provider's directly-proposed
+    # components with geometry-derived candidates (e.g. fastener quantities counted from
+    # repeated-feature evidence like "6x through_hole"), rather than persisting only
+    # result.components directly. This never calls AI again - purely deterministic.
+    candidates = build_candidate_bom(result)
+    for comp in candidates:
         make_buy = comp.make_buy if comp.make_buy in ("Make", "Buy", "Review") else classify_component(
             comp.category, comp.description, comp.confidence)
         component = Component(
@@ -144,6 +150,11 @@ def _persist_result(
             source_page=page_override if page_override is not None else comp.source_page,
             source_region=comp.source_region,
             source_text=comp.source_text,
+            quantity_basis=comp.quantity_basis,
+            component_type=comp.component_type,
+            parent_part_number=comp.parent_part_number,
+            is_assumption=comp.is_assumption,
+            assumption_text=comp.assumption_text,
         )
         db.add(component)
         components.append(component)

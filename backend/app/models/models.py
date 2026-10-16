@@ -142,6 +142,11 @@ class Component(Base):
     source_page = Column(Integer, default=1)
     source_region = Column(JSON, default=dict)  # bbox
     source_text = Column(Text, default="")
+    quantity_basis = Column(String, default="assumed", nullable=True)  # explicit_callout/counted_feature/assumed
+    component_type = Column(String, default="purchased", nullable=True)  # raw_material/purchased/manufactured/assembly
+    parent_part_number = Column(String, nullable=True)
+    is_assumption = Column(Boolean, default=False, nullable=True)
+    assumption_text = Column(Text, default="", nullable=True)
 
     analysis = relationship("Analysis", back_populates="components")
 

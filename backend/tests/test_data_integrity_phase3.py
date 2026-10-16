@@ -126,6 +126,11 @@ def test_analysis_with_zero_components_still_persists_cleanly(db, monkeypatch):
         result = original_generate(self, image_path=image_path, ocr_text=ocr_text,
                                     drawing_number=drawing_number)
         result.components = []
+        # Also clear repeated_features: otherwise bom_candidate_service.build_candidate_bom()
+        # (now wired into the pipeline) would still derive a geometry-based fastener candidate
+        # from the demo provider's repeated-feature evidence, which is correct behavior but not
+        # what this "truly nothing was found" test is simulating.
+        result.repeated_features = []
         return result
 
     monkeypatch.setattr(demo_provider.DemoProvider, "analyze", _empty_analyze)
