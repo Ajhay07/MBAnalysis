@@ -17,6 +17,44 @@ from app.providers.openai_provider import (
 )
 from app.schemas.analysis import AnalysisResult
 
+from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
+
+
+def _normalize_nulls(data, model_cls: type[BaseModel]):
+    """Gemini (observed live, unlike OpenAI's json_object mode) sometimes emits an explicit JSON
+    null for an optional dict/string field instead of omitting it (e.g. title_block.scale: null,
+    components[].source_region: null). Pydantic's strict dict/str field types reject None even
+    when the field has a non-None default, so without this normalization every such response
+    would be rejected as a schema violation. This walks the raw dict/list structure using the
+    target model's own field defaults (never inventing a value - only replacing an explicit null
+    with that field's declared default) before validation."""
+    if not isinstance(data, dict):
+        return data
+    cleaned = dict(data)
+    for field_name, field in model_cls.model_fields.items():
+        if field_name not in cleaned:
+            continue
+        value = cleaned[field_name]
+        annotation = field.annotation
+        # Unwrap list[Model] / Model-typed fields to recurse into nested structures.
+        origin = getattr(annotation, "__origin__", None)
+        if origin in (list,):
+            (item_type,) = getattr(annotation, "__args__", (None,))
+            if value is None:
+                cleaned[field_name] = field.default_factory() if field.default_factory else []
+            elif isinstance(item_type, type) and issubclass(item_type, BaseModel) and isinstance(value, list):
+                cleaned[field_name] = [_normalize_nulls(item, item_type) for item in value]
+        elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            cleaned[field_name] = _normalize_nulls(value, annotation) if value is not None else value
+        elif value is None:
+            default = field.default
+            if default is not PydanticUndefined and default is not None:
+                cleaned[field_name] = default
+            elif field.default_factory is not None:
+                cleaned[field_name] = field.default_factory()
+    return cleaned
+
 # Reuses the exact same SYSTEM_PROMPT/schema contract and ProviderAuthError/ProviderTransientError
 # exceptions as OpenAIVisionProvider so analysis_pipeline.py can treat every real provider
 # identically - only the underlying SDK call differs.
@@ -128,8 +166,13 @@ class GeminiVisionProvider(DrawingAnalysisProvider):
             data = json.loads(content)
         except (json.JSONDecodeError, TypeError) as exc:
             raise ProviderTransientError(f"AI provider returned malformed (non-JSON) response: {exc}") from exc
-        data.setdefault("provider", "gemini")
+        # Always stamped unconditionally (not setdefault) - the model sometimes fills its own
+        # (wrong) value for "provider" despite the prompt instruction, e.g. observed live
+        # returning "custom"; this field must reliably identify the real provider that produced
+        # the result for the Analysis.provider column / UI badge, never a model-invented string.
+        data["provider"] = "gemini"
         data.setdefault("raw_ocr_text", ocr_text)
+        data = _normalize_nulls(data, AnalysisResult)
         try:
             return AnalysisResult.model_validate(data)
         except ValidationError as exc:
