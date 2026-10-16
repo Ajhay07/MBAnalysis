@@ -44,6 +44,11 @@ class ComponentOut(BaseModel):
     source_region: dict
     source_text: str
     parent_component_id: str | None = None
+    quantity_basis: str | None = None
+    component_type: str | None = None
+    parent_part_number: str | None = None
+    is_assumption: bool | None = None
+    assumption_text: str | None = None
 
     model_config = {"from_attributes": True}
 
