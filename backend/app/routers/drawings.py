@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_role
 from app.config import get_settings
 from app.database import get_db
-from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User, Job
+from app.models.models import Drawing, DrawingStatus, Analysis, AuditLog, User, Job, Component, ReferenceBomTable
 from app.schemas.api import DrawingOut, AnalysisOut
 from app.services.analysis_pipeline import run_analysis, drawing_abspath, page_preview_path, PdfProcessingError
 from app.services.file_validation import (
@@ -17,6 +17,7 @@ from app.services.file_validation import (
     validate_content_matches_extension,
 )
 from app.services.paddle_ocr import run_page_ocr
+from app.services.reference_bom_service import compute_discrepancy
 
 try:
     import cv2
@@ -265,3 +266,46 @@ def list_analyses(drawing_id: str, db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
     return db.query(Analysis).filter(Analysis.drawing_id == drawing_id).order_by(
         Analysis.version.desc()).all()
+
+
+@router.get("/{drawing_id}/analyses/{analysis_id}/reference-bom")
+def get_reference_bom(drawing_id: str, analysis_id: str, db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    """Whether a printed reference BOM table was detected on this analysis's pages
+    (app.services.reference_bom_service), and - only when both a reference table AND
+    generated candidate Component rows exist - a read-only discrepancy report comparing them.
+    Never implies a table should exist when none was detected."""
+    analysis = db.query(Analysis).filter(
+        Analysis.id == analysis_id, Analysis.drawing_id == drawing_id).first()
+    if not analysis:
+        raise HTTPException(404, "Analysis not found")
+
+    tables = db.query(ReferenceBomTable).filter(
+        ReferenceBomTable.analysis_id == analysis_id).order_by(ReferenceBomTable.page_number).all()
+    components = db.query(Component).filter(Component.analysis_id == analysis_id).all()
+
+    if not tables:
+        return {"detected": False, "tables": [], "discrepancy": None}
+
+    table_payload = [
+        {
+            "page_number": t.page_number,
+            "matched_headers": t.matched_headers,
+            "bbox": t.bbox,
+            "raw_text": t.raw_text,
+            "row_count_estimate": t.row_count_estimate,
+        }
+        for t in tables
+    ]
+
+    discrepancy = None
+    if components:
+        discrepancy = compute_discrepancy(
+            reference_row_count=sum(t.row_count_estimate or 0 for t in tables),
+            candidate_component_count=len(components),
+            reference_text="\n".join(t.raw_text for t in tables),
+            candidate_descriptions=[c.description for c in components if c.description],
+            candidate_part_numbers=[c.part_number for c in components if c.part_number],
+        )
+
+    return {"detected": True, "tables": table_payload, "discrepancy": discrepancy}

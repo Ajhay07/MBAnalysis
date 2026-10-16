@@ -110,6 +110,8 @@ class Analysis(Base):
 
     drawing = relationship("Drawing", back_populates="analyses")
     components = relationship("Component", back_populates="analysis", cascade="all, delete-orphan")
+    reference_bom_tables = relationship(
+        "ReferenceBomTable", back_populates="analysis", cascade="all, delete-orphan")
 
     @property
     def page_count(self) -> int:
@@ -149,6 +151,25 @@ class Component(Base):
     assumption_text = Column(Text, default="", nullable=True)
 
     analysis = relationship("Analysis", back_populates="components")
+
+
+class ReferenceBomTable(Base):
+    """A detected printed BOM table on a drawing page (app.services.reference_bom_service's
+    OCR-layout heuristic). Strictly read-only evidence - kept entirely separate from, and
+    never overwritten/reconciled by, the geometry-derived candidate Component rows. Used only
+    to compute an on-demand discrepancy report for a human reviewer."""
+    __tablename__ = "reference_bom_tables"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    analysis_id = Column(String, ForeignKey("analyses.id"), nullable=False)
+    page_number = Column(Integer, default=1)
+    matched_headers = Column(JSON, default=list)
+    bbox = Column(JSON, default=dict)
+    raw_text = Column(Text, default="")
+    row_count_estimate = Column(Integer, default=0)
+    detected_at = Column(DateTime, default=datetime.utcnow)
+
+    analysis = relationship("Analysis", back_populates="reference_bom_tables")
 
 
 class Bom(Base):

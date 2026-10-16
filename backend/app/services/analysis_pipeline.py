@@ -18,13 +18,16 @@ except Exception:  # pragma: no cover
 from datetime import datetime
 
 from app.config import get_settings
-from app.models.models import Analysis, Component, Drawing, DrawingStatus, AuditLog, Job, JobStage
+from app.models.models import (
+    Analysis, Component, Drawing, DrawingStatus, AuditLog, Job, JobStage, ReferenceBomTable,
+)
 from app.providers import get_provider
 from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
 from app.schemas.analysis import AnalysisResult
 from app.services.classification import classify_component
 from app.services.paddle_ocr import run_page_ocr
 from app.services.bom_candidate_service import build_candidate_bom
+from app.services.reference_bom_service import detect_reference_bom_table
 
 def _pdf_raster_zoom() -> float:
     """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 288) is what
@@ -161,6 +164,26 @@ def _persist_result(
     return components
 
 
+def _persist_reference_bom_tables(db: Session, analysis: Analysis, page_ocr_by_page: dict) -> None:
+    """Runs the reference-BOM-table detection heuristic against each page's raw OCR regions and
+    persists any hits. Strictly additive/independent of candidate-BOM generation - never reads
+    or mutates Component rows."""
+    for page_number, page_ocr in page_ocr_by_page.items():
+        if page_ocr is None or not page_ocr.regions:
+            continue
+        detection = detect_reference_bom_table(page_ocr.regions, page_number=page_number)
+        if detection is None:
+            continue
+        db.add(ReferenceBomTable(
+            analysis_id=analysis.id,
+            page_number=detection.page_number,
+            matched_headers=detection.matched_headers,
+            bbox=detection.bbox,
+            raw_text=detection.raw_text,
+            row_count_estimate=detection.row_count_estimate,
+        ))
+
+
 def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_count: int = 0) -> Analysis:
     """Full pipeline: OCR -> AI provider (OpenAI vision or demo) -> persist versioned analysis
     with components. Never substitutes seeded demo content for a real drawing - the provider
@@ -205,6 +228,7 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
         title_block = None
         provider_name = provider.name
         pending_components: list = []  # list of (AnalysisResult, page_number)
+        page_ocr_by_page: dict = {}  # page_number -> PageOcrResult, for reference-table detection
 
         job.stage = JobStage.EXTRACTING_PAGES
         db.commit()
@@ -218,6 +242,7 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
                 page_ocr = None
                 if image is not None:
                     page_ocr = run_page_ocr(image, page_number=page_number)
+                    page_ocr_by_page[page_number] = page_ocr
                     # Scanned pages have no embedded text; OCR output fills the gap. When both
                     # exist, keep both available as context rather than forcibly deduplicating -
                     # just skip a literal exact-duplicate append.
@@ -255,6 +280,7 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
             db.commit()
             if image is not None:
                 page_ocr = run_page_ocr(image, page_number=1)
+                page_ocr_by_page[1] = page_ocr
                 ocr_text = page_ocr.text
 
             job.stage = JobStage.VISION_ANALYSIS
@@ -296,6 +322,8 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
         all_components: list[Component] = []
         for page_result, page_number in pending_components:
             all_components.extend(_persist_result(db, drawing, analysis, page_result, page_number))
+
+        _persist_reference_bom_tables(db, analysis, page_ocr_by_page)
 
         needs_review = any(c.confidence < 0.6 for c in all_components) or not all_components
         drawing.status = DrawingStatus.NEEDS_REVIEW if needs_review else DrawingStatus.REVIEWED
