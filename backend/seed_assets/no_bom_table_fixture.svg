@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+    <rect width="1000" height="700" fill="#fafafa"/>
+    <rect x="10" y="10" width="980" height="680" fill="none" stroke="#333" stroke-width="2"/>
+    
+    <rect x="220" y="220" width="400" height="260" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="300" cy="300" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="540" cy="300" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="300" cy="400" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="540" cy="400" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="220" y1="200" x2="620" y2="200"/>
+      <line x1="220" y1="195" x2="220" y2="205"/>
+      <line x1="620" y1="195" x2="620" y2="205"/>
+      <text x="408.0" y="194">400.0 +/-0.15</text>
+    </g>
+    
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="200" y1="220" x2="200" y2="480"/>
+      <line x1="200" y1="215" x2="200" y2="225"/>
+      <line x1="200" y1="475" x2="200" y2="485"/>
+      <text x="188.0" y="214">260.0</text>
+    </g>
+    
+    <g font-family="Consolas, monospace" font-size="10" fill="#222">
+      <text x="220" y="520">LEGEND:</text>
+      <text x="220" y="535">4x HOLES, dia 12.0mm THRU</text>
+      <text x="220" y="550">MATERIAL: Aluminum 6061-T6</text>
+    </g>
+    
+    
+    <g font-family="Consolas, monospace" font-size="10" stroke="#333" fill="#222">
+      <rect x="740" y="600" width="250" height="90" fill="white" stroke="#333" stroke-width="1.2"/>
+      <line x1="740" y1="625" x2="990" y2="625" stroke="#333"/>
+      <line x1="740" y1="650" x2="990" y2="650" stroke="#333"/>
+      <line x1="890" y1="650" x2="890" y2="690" stroke="#333"/>
+      <text x="748" y="617" font-weight="bold">PUMP HOUSING BRACKET</text>
+      <text x="748" y="640">DWG NO: MB-10045-REV-C</text>
+      <text x="748" y="665">REV: C</text>
+      <text x="898" y="665">SCALE: 1:2</text>
+      <text x="748" y="685">UNITS: mm   MATERIAL: SEE BOM</text>
+    </g>
+    
+    </svg>

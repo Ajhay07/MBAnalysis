@@ -1,0 +1,15 @@
+{
+  "fixture": "no_bom_table_fixture (backend/seed_assets/no_bom_table_fixture.svg text content)",
+  "description": "A single 2D sketch view with dimensions, hole-count legend, and a title block, but deliberately NO ITEM/QTY/PART-NO BOM table grid anywhere on the page.",
+  "expectations": {
+    "reference_bom_service.detect_reference_bom_table": {
+      "expected_result": null,
+      "reason": "Fewer than MIN_DISTINCT_HEADER_TOKENS (3) BOM-header-like tokens appear anywhere on the page; the detector must not fabricate a table that is not visually present."
+    },
+    "bom_candidate_service.build_candidate_bom_via_demo_provider": {
+      "expected_min_component_count": 3,
+      "reason": "The Demo provider (the only provider path ever exercised for this feature) always returns 2 directly-proposed components (DEMO-COMP-1, DEMO-COMP-2) plus bom_candidate_service derives 1 additional geometry-derived fastener candidate (quantity_basis=counted_feature, part_number='') from the provider's repeated_features (6x through_hole), regardless of the actual fixture image content - the Demo provider does not inspect the uploaded image/OCR text. This expectation is about the deterministic candidate-merge logic actually running end-to-end through the real pipeline, not about genuine AI interpretation of this specific fixture (no OpenAI key is configured anywhere in this project)."
+    }
+  },
+  "honesty_note": "paddleocr is not installed in this development/test environment, so real OCR text extraction from the rendered fixture image cannot be exercised here; run_page_ocr() returns configured=False with zero regions in that case, and detect_reference_bom_table() trivially returns None for an empty region list. This test therefore separately verifies (a) the real pipeline persists zero ReferenceBomTable rows for this fixture when OCR is unavailable, AND (b) the detector's own logic, given OCR regions that mirror this fixture's actual text content (same technique as tests/test_reference_bom_service.py's existing unit test), independently returns no detection."
+}

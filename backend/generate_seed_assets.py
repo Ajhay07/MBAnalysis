@@ -97,12 +97,41 @@ def bracket_svg() -> str:
     </svg>"""
 
 
+def no_bom_table_svg() -> str:
+    """A single 2D sketch view with dimensions and a material legend, but deliberately NO
+    ITEM/QTY/PART-NO BOM table grid anywhere - used to test that reference_bom_service
+    correctly reports no detection on a drawing that legitimately has none (as opposed to a
+    detector that never fires, or one that over-triggers on any text block)."""
+    w, h = 1000, 700
+    body = f"""
+    <rect x="220" y="220" width="400" height="260" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="300" cy="300" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="540" cy="300" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="300" cy="400" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="540" cy="400" r="30" fill="none" stroke="#1a1a1a" stroke-width="1.5"/>
+    {dim_line(220, 200, 620, 200, '400.0 +/-0.15')}
+    {dim_line(200, 220, 200, 480, '260.0')}
+    <g font-family="Consolas, monospace" font-size="10" fill="#222">
+      <text x="220" y="520">LEGEND:</text>
+      <text x="220" y="535">4x HOLES, dia 12.0mm THRU</text>
+      <text x="220" y="550">MATERIAL: Aluminum 6061-T6</text>
+    </g>
+    """
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">
+    <rect width="{w}" height="{h}" fill="#fafafa"/>
+    {border(w, h)}
+    {body}
+    {title_block('MB-10045-REV-C', 'PUMP HOUSING BRACKET', 'C', '1:2', w, h)}
+    </svg>"""
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     files = {
         "gearbox_assembly.svg": gearbox_svg(),
         "shaft_bearing_assembly.svg": shaft_bearing_svg(),
         "sheet_metal_bracket.svg": bracket_svg(),
+        "no_bom_table_fixture.svg": no_bom_table_svg(),
     }
     for name, content in files.items():
         path = os.path.join(OUT_DIR, name)
