@@ -11,6 +11,10 @@ TEST_DB_PATH = os.path.join(tempfile.gettempdir(), "mbanalysis_test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ["UPLOAD_DIR"] = os.path.join(tempfile.gettempdir(), "mbanalysis_test_uploads")
 os.environ.setdefault("OPENAI_API_KEY", "")
+# Neutralized the same way as OPENAI_API_KEY above: a real GEMINI_API_KEY may be present in
+# backend/.env for live verification outside pytest, but must never leak into the normal test
+# suite (which assumes Demo-provider fallback unless a test explicitly monkeypatches a key in).
+os.environ.setdefault("GEMINI_API_KEY", "")
 # Fixed test secret: deterministic, avoids the "generate a random dev secret" warning noise on
 # every test run. Never reused outside tests.
 os.environ.setdefault("JWT_SECRET", "test-only-secret-do-not-use-in-real-deployments")

@@ -45,4 +45,5 @@ def get_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_
 @router.get("/ai-status")
 def ai_status(current_user: User = Depends(get_current_user)):
     settings = get_settings()
-    return {"mode": settings.ai_mode, "vision_model": settings.OPENAI_VISION_MODEL}
+    vision_model = settings.GEMINI_MODEL if settings.ai_mode == "gemini" else settings.OPENAI_VISION_MODEL
+    return {"mode": settings.ai_mode, "vision_model": vision_model}

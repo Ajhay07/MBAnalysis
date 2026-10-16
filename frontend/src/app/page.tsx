@@ -42,8 +42,8 @@ export default function DashboardPage() {
           <h1 className="text-xl font-semibold text-graphite">Operations Dashboard</h1>
           <p className="text-sm text-steel mt-0.5">
             AI mode:{" "}
-            <span className={`font-medium ${aiMode === "openai" ? "text-emerald-700" : "text-accent-dark"}`}>
-              {aiMode === "openai" ? "OpenAI Vision" : "Demo (no API key configured)"}
+            <span className={`font-medium ${aiMode === "openai" || aiMode === "gemini" ? "text-emerald-700" : "text-accent-dark"}`}>
+              {aiMode === "gemini" ? "Gemini Vision" : aiMode === "openai" ? "OpenAI Vision" : "Demo (no API key configured)"}
             </span>
           </p>
         </div>
