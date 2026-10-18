@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import DrawingThumb from "@/components/DrawingThumb";
 import { describeActivity, formatDateTime } from "@/lib/format";
+import PageHeader from "@/components/PageHeader";
 
 type ReviewRow = Awaited<ReturnType<typeof api.reviewComponents>>[number];
 type TabKey = "low" | "needs" | "approved";
@@ -61,11 +62,12 @@ export default function ReviewPage() {
   const visible = rows.filter(active.filter);
 
   return (
-    <div className="px-8 pb-8 pt-2 max-w-[1200px]">
-      <div className="mb-6">
-        <h1 className="page-title">Review &amp; Approval Center</h1>
-        <p className="page-subtitle">Review AI-extracted components and resolve low-confidence items.</p>
-      </div>
+    <div className="px-8 pb-10">
+      <PageHeader
+        breadcrumb={[{ label: "Drawing Library", href: "/drawings" }, { label: "Review" }]}
+        title="Review & Approval Center"
+        subtitle="Review AI-extracted components and resolve low-confidence items."
+      />
 
       <div className="card mb-5">
         <div className="flex border-b border-border px-2">
@@ -100,7 +102,7 @@ export default function ReviewPage() {
               <tr key={r.component_id} className="hover:bg-surface/50">
                 <td className="td">
                   <Link href={`/drawings/${r.drawing_id}`} className="flex items-center gap-3 group">
-                    <DrawingThumb id={r.drawing_id} fileType={r.file_type} className="w-14 h-11" />
+                    <DrawingThumb id={r.drawing_id} fileType={r.file_type} className="w-[76px] h-[58px] p-0.5" />
                     <span className="text-xs text-steel group-hover:text-brand">{r.drawing_number}</span>
                   </Link>
                 </td>
@@ -119,7 +121,7 @@ export default function ReviewPage() {
                         key={v}
                         disabled={savingId === r.component_id}
                         onClick={() => setMakeBuy(r, v)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                        className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors ${
                           r.make_buy === v ? ACTION_STYLES[v] : "bg-white text-graphite border-border hover:bg-surface"
                         }`}
                       >
@@ -135,7 +137,7 @@ export default function ReviewPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-base font-semibold px-5 pt-5 pb-3">Audit Trail</h2>
+        <h2 className="text-lg font-bold px-5 pt-5 pb-3">Audit Trail</h2>
         <table className="w-full">
           <thead className="border-y border-border bg-surface/60">
             <tr>

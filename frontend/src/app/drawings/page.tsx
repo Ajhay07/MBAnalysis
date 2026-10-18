@@ -6,7 +6,13 @@ import { useSearchParams } from "next/navigation";
 import { Plus, Search, Trash2, RefreshCw, Eye, MoreVertical } from "lucide-react";
 import { api, Drawing } from "@/lib/api";
 import DrawingThumb from "@/components/DrawingThumb";
-import { DemoBadge, StatusBadge } from "@/components/Badges";
+import { StatusBadge } from "@/components/Badges";
+import PageHeader from "@/components/PageHeader";
+
+const STATUS_OPTIONS: [string, string][] = [
+  ["Uploaded", "Uploaded"], ["Queued", "Queued"], ["Processing", "Processing"], ["NeedsReview", "Analyzed"],
+  ["Reviewed", "Reviewed"], ["BOMGenerated", "BOM Generated"], ["Failed", "Failed"], ["Cancelled", "Cancelled"],
+];
 
 export default function DrawingsPage() {
   return (
@@ -78,68 +84,68 @@ function DrawingsPageInner() {
   }
 
   return (
-    <div className="px-8 pb-8 pt-2 max-w-[1200px]">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="page-title">Drawing Library</h1>
-          <p className="page-subtitle">Manage and search engineering drawings.</p>
-        </div>
-        <button className="btn-primary !py-2.5" onClick={() => setShowUpload(true)}>
-          <Plus size={16} /> Upload Drawing
-        </button>
-      </div>
+    <div className="px-8 pb-10">
+      <PageHeader
+        breadcrumb={[{ label: "Drawings" }]}
+        title="Drawing Library"
+        subtitle="Manage and search engineering drawings."
+        actions={
+          <button className="btn-primary !px-6 !py-3 !text-base" onClick={() => setShowUpload(true)}>
+            <Plus size={19} /> Upload Drawing
+          </button>
+        }
+      />
 
       {showUpload && (
         <UploadPanel onClose={() => setShowUpload(false)} onUploaded={load} setError={setError} />
       )}
       {error && <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-industrial p-3">{error}</div>}
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-4 mb-5">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-2.5 text-steel-light" />
+          <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-graphite/70" />
           <input
-            className="input !pl-9"
-            placeholder="Search by drawing number, title or keyword..."
+            className="input !h-14 !pl-14 !text-[15px]"
+            placeholder="Search by drawing number, title, or keyword..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <select className="input !w-48" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select className="input !h-14 !w-60" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
-          {["Uploaded", "Queued", "Processing", "NeedsReview", "Reviewed", "BOMGenerated", "Failed", "Cancelled"].map(
-            (s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            )
-          )}
+          {STATUS_OPTIONS.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
       </div>
 
-      <div className="card">
+      <div className="card overflow-visible">
         <table className="w-full">
-          <thead className="border-b border-border bg-surface/60">
+          <thead className="border-b border-border">
             <tr>
-              <th className="th w-10">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
+              <th className="th w-14 !pl-5 rounded-tl-industrial">
+                <input type="checkbox" className="w-[18px] h-[18px] align-middle" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
               </th>
-              <th className="th w-24">Preview</th>
+              <th className="th w-40">Preview</th>
+              <th className="th w-40">Drawing #</th>
               <th className="th">Title</th>
-              <th className="th w-16">Rev</th>
-              <th className="th w-36">Status</th>
-              <th className="th w-36">Updated</th>
-              <th className="th w-28 text-right">Actions</th>
+              <th className="th w-20">Rev</th>
+              <th className="th w-40">Status</th>
+              <th className="th w-52">Updated</th>
+              <th className="th w-36 rounded-tr-industrial">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={7} className="td text-center text-steel">Loading...</td>
+                <td colSpan={8} className="td text-center text-steel">Loading...</td>
               </tr>
             )}
             {!loading && drawings.length === 0 && (
               <tr>
-                <td colSpan={7} className="td text-center text-steel">
+                <td colSpan={8} className="td text-center text-steel">
                   No drawings yet. Upload one or load the demo project.
                 </td>
               </tr>
@@ -147,50 +153,47 @@ function DrawingsPageInner() {
             {drawings.map((d) => {
               const updated = new Date(d.updated_at);
               return (
-                <tr key={d.id} className="hover:bg-surface/50">
-                  <td className="td">
+                <tr key={d.id} className="hover:bg-surface/40">
+                  <td className="td !pl-5">
                     <input
                       type="checkbox"
+                      className="w-[18px] h-[18px] align-middle"
                       checked={selected.has(d.id)}
                       onChange={() => toggleOne(d.id)}
                       aria-label={`Select ${d.drawing_number}`}
                     />
                   </td>
                   <td className="td">
-                    <DrawingThumb id={d.id} fileType={d.file_type} />
+                    <DrawingThumb id={d.id} fileType={d.file_type} className="w-[112px] h-[84px] p-0.5" />
                   </td>
                   <td className="td">
-                    <Link href={`/drawings/${d.id}`} className="font-semibold text-graphite hover:text-brand">
+                    <Link href={`/drawings/${d.id}`} className="text-[17px] font-bold text-graphite hover:text-brand">
                       {d.drawing_number}
                     </Link>
-                    <div className="flex items-center gap-2 text-xs text-steel mt-0.5">
-                      {d.title}
-                      {d.is_demo && <DemoBadge />}
-                    </div>
                   </td>
-                  <td className="td text-steel">{d.revision}</td>
+                  <td className="td text-[16px] text-graphite">{d.title}</td>
+                  <td className="td text-[16px] text-graphite">{d.revision}</td>
                   <td className="td">
                     <StatusBadge status={d.status} />
                   </td>
-                  <td className="td text-xs text-steel leading-tight">
-                    <div>{updated.toLocaleDateString("en-GB")}</div>
-                    <div>{updated.toLocaleTimeString("en-GB")}</div>
+                  <td className="td text-[16px] text-steel whitespace-nowrap">
+                    {updated.toLocaleDateString("en-GB")}, {updated.toLocaleTimeString("en-GB")}
                   </td>
                   <td className="td">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/drawings/${d.id}`} className="btn-icon" title="View">
-                        <Eye size={15} />
+                    <div className="flex gap-3">
+                      <Link href={`/drawings/${d.id}`} className="btn-icon !w-12 !h-12 !text-graphite" title="View">
+                        <Eye size={21} />
                       </Link>
                       <div className="relative" ref={menuId === d.id ? menuRef : undefined}>
                         <button
-                          className="btn-icon"
+                          className="btn-icon !w-12 !h-12 !text-graphite"
                           title="More actions"
                           onClick={() => setMenuId((m) => (m === d.id ? null : d.id))}
                         >
-                          <MoreVertical size={15} />
+                          <MoreVertical size={21} />
                         </button>
                         {menuId === d.id && (
-                          <div className="absolute right-0 mt-1 w-40 card py-1 z-30">
+                          <div className="absolute right-0 mt-1 w-44 card py-1 z-30">
                             <button
                               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-steel hover:bg-surface hover:text-graphite"
                               onClick={() => handleReprocess(d.id)}
@@ -283,7 +286,7 @@ function UploadPanel({
 
   return (
     <div className="card p-5 mb-6">
-      <h2 className="text-base font-semibold mb-4">Upload Drawing</h2>
+      <h2 className="text-lg font-bold mb-4">Upload Drawing</h2>
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div>
           <label className="block text-xs font-medium text-steel mb-1">Drawing Number *</label>

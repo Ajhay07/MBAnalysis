@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Cog, Settings2, Cylinder, Box, Weight, Package, Ruler, type LucideIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
 
 type CalcKey = "gear-ratio" | "gear-module" | "cylindrical-volume" | "rectangular-volume" | "mass" | "raw-stock-volume" | "convert-length";
 type Field = { name: string; label: string; type?: string; default?: string };
@@ -124,11 +125,12 @@ export default function CalculationsPage() {
   const shown = main.result ? presentResult(active, main.result.result, main.values) : null;
 
   return (
-    <div className="px-8 pb-8 pt-2 max-w-[1200px]">
-      <div className="mb-6">
-        <h1 className="page-title">Engineering Calculation Engine</h1>
-        <p className="page-subtitle">Quickly compute common engineering parameters.</p>
-      </div>
+    <div className="px-8 pb-10">
+      <PageHeader
+        breadcrumb={[{ label: "Engineering Tools" }]}
+        title="Engineering Calculation Engine"
+        subtitle="Quickly compute common engineering parameters."
+      />
 
       <div className="grid grid-cols-[230px_1fr] gap-5 mb-6">
         <div className="card p-2 h-fit">
@@ -139,7 +141,7 @@ export default function CalculationsPage() {
               <button
                 key={f.key}
                 onClick={() => select(f.key)}
-                className={`w-full flex items-center gap-3 text-left text-sm px-3 py-2.5 rounded-industrial transition-colors ${
+                className={`w-full flex items-center gap-3 text-left text-[15px] px-3 py-3 rounded-industrial transition-colors ${
                   on ? "bg-brand-light text-brand font-semibold" : "text-steel hover:bg-surface hover:text-graphite"
                 }`}
               >
@@ -195,7 +197,7 @@ export default function CalculationsPage() {
         </div>
       </div>
 
-      <h2 className="text-base font-semibold mb-3">Other Calculations</h2>
+      <h2 className="text-lg font-bold mb-3">Other Calculations</h2>
       <div className="grid grid-cols-2 gap-5">
         <QuickCalc def={byKey("cylindrical-volume")} calc={cyl} />
         <QuickCalc def={byKey("rectangular-volume")} calc={rect} />

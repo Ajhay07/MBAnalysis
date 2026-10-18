@@ -12,14 +12,14 @@ const config: Config = {
         "steel-light": "#8a94a3",
         border: "#e3e8ef",
         navy: {
-          DEFAULT: "#0e1d30",
+          DEFAULT: "#11233a",
           light: "#16294180",
           line: "#1f3550",
         },
         brand: {
-          DEFAULT: "#1f6feb",
-          dark: "#1658c4",
-          light: "#e8f0fe",
+          DEFAULT: "#1668dc",
+          dark: "#1256b8",
+          light: "#e6effc",
         },
         accent: {
           DEFAULT: "#f26b1d",

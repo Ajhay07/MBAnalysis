@@ -8,6 +8,7 @@ import {
 import { Plus, Sparkles, RotateCcw, MoreHorizontal } from "lucide-react";
 import { api, DashboardMetrics } from "@/lib/api";
 import { describeActivity, formatDateTime } from "@/lib/format";
+import PageHeader from "@/components/PageHeader";
 
 const STATUS_BUCKETS: { label: string; statuses: string[]; color: string }[] = [
   { label: "Uploaded", statuses: ["Uploaded", "Queued", "Processing"], color: "#b9c2cc" },
@@ -80,45 +81,46 @@ export default function DashboardPage() {
   const mixTotal = mixData.reduce((n, d) => n + d.value, 0);
 
   return (
-    <div className="px-8 pb-8 pt-2 max-w-[1200px]">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="page-title">Operations Dashboard</h1>
-          <p className="page-subtitle">Turn engineering drawings into accurate BOMs and procurement plans.</p>
-          <p className="text-xs text-steel-light mt-1">
-            AI mode:{" "}
-            <span className={aiMode === "openai" || aiMode === "gemini" ? "text-emerald-700 font-medium" : "text-accent-dark font-medium"}>
-              {aiMode === "gemini" ? "Gemini Vision" : aiMode === "openai" ? "OpenAI Vision" : "Demo (no API key configured)"}
-            </span>
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative" ref={menuRef}>
-            <button className="btn-icon !w-10 !h-10" disabled={busy} onClick={() => setMenuOpen((o) => !o)} title="Demo data">
-              <MoreHorizontal size={18} />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-52 card py-1 z-40">
-                <button
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-steel hover:bg-surface hover:text-graphite"
-                  onClick={() => demoAction(api.loadDemo)}
-                >
-                  <Sparkles size={14} /> Load Demo Project
-                </button>
-                <button
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-steel hover:bg-surface hover:text-graphite"
-                  onClick={() => demoAction(api.resetDemo)}
-                >
-                  <RotateCcw size={14} /> Reset Demo Data
-                </button>
-              </div>
-            )}
-          </div>
-          <Link href="/drawings?upload=1" className="btn-primary !py-2.5">
-            <Plus size={16} /> Analyze New Drawing
-          </Link>
-        </div>
-      </div>
+    <div className="px-8 pb-10">
+      <PageHeader
+        breadcrumb={[{ label: "Overview" }]}
+        title="Operations Dashboard"
+        subtitle="Turn engineering drawings into accurate BOMs and procurement plans."
+        actions={
+          <>
+            <div className="relative" ref={menuRef}>
+              <button className="btn-icon !w-12 !h-12" disabled={busy} onClick={() => setMenuOpen((o) => !o)} title="Demo data &amp; AI mode">
+                <MoreHorizontal size={20} />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 mt-2 w-64 card py-1 z-40">
+                  <div className="px-4 py-2 text-xs text-steel border-b border-border">
+                    AI mode:{" "}
+                    <span className={aiMode === "openai" || aiMode === "gemini" ? "text-emerald-700 font-medium" : "text-accent-dark font-medium"}>
+                      {aiMode === "gemini" ? "Gemini Vision" : aiMode === "openai" ? "OpenAI Vision" : "Demo (no API key)"}
+                    </span>
+                  </div>
+                  <button
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-steel hover:bg-surface hover:text-graphite"
+                    onClick={() => demoAction(api.loadDemo)}
+                  >
+                    <Sparkles size={15} /> Load Demo Project
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-steel hover:bg-surface hover:text-graphite"
+                    onClick={() => demoAction(api.resetDemo)}
+                  >
+                    <RotateCcw size={15} /> Reset Demo Data
+                  </button>
+                </div>
+              )}
+            </div>
+            <Link href="/drawings?upload=1" className="btn-primary !px-6 !py-3 !text-base">
+              <Plus size={19} /> Analyze New Drawing
+            </Link>
+          </>
+        }
+      />
 
       {loading || !metrics ? (
         <div className="text-steel text-sm">Loading metrics...</div>
@@ -133,12 +135,12 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div className="card p-5">
-              <h2 className="text-base font-semibold mb-3">Drawing Status Breakdown</h2>
+              <h2 className="text-lg font-bold mb-3">Drawing Status Breakdown</h2>
               <ResponsiveContainer width="100%" height={230}>
                 <BarChart data={statusData} margin={{ top: 20, right: 8, left: -16, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e3e8ef" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#5a6576" }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#8a94a3" }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 13, fill: "#5a6576" }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#8a94a3" }} axisLine={false} tickLine={false} />
                   <Bar dataKey="count" radius={[3, 3, 0, 0]} maxBarSize={44}>
                     {statusData.map((d) => (
                       <Cell key={d.label} fill={d.color} />
@@ -150,7 +152,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="card p-5">
-              <h2 className="text-base font-semibold mb-3">Make / Buy / Review</h2>
+              <h2 className="text-lg font-bold mb-3">Make / Buy / Review</h2>
               <div className="flex items-center gap-6 h-[230px]">
                 <div className="relative w-[210px] h-[210px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
@@ -176,7 +178,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-steel">Total items</div>
                   </div>
                 </div>
-                <ul className="space-y-3 text-sm flex-1">
+                <ul className="space-y-4 text-[15px] flex-1">
                   {mixData.map((d) => (
                     <li key={d.name} className="flex items-center justify-between">
                       <span className="flex items-center gap-2 text-steel">
@@ -192,7 +194,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-base font-semibold px-5 pt-5 pb-3">Recent Activity</h2>
+            <h2 className="text-lg font-bold px-5 pt-5 pb-3">Recent Activity</h2>
             <table className="w-full">
               <thead className="border-y border-border bg-surface/60">
                 <tr>
@@ -230,9 +232,9 @@ export default function DashboardPage() {
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
     <div className="card p-5">
-      <div className="text-[11px] uppercase tracking-wide text-graphite font-semibold">{label}</div>
-      <div className="text-4xl font-bold mt-2 text-graphite">{String(value).padStart(2, "0")}</div>
-      <div className="text-xs text-steel-light mt-1">{hint}</div>
+      <div className="text-[13px] uppercase tracking-wide text-graphite font-bold">{label}</div>
+      <div className="text-[42px] leading-tight font-bold mt-2 text-graphite">{String(value).padStart(2, "0")}</div>
+      <div className="text-sm text-steel mt-1">{hint}</div>
     </div>
   );
 }

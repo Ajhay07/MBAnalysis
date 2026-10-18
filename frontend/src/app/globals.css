@@ -16,19 +16,19 @@ body {
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark text-white text-[15px] font-medium px-5 py-2.5 rounded-industrial transition-colors disabled:opacity-60;
 }
 
 .btn-accent {
-  @apply inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-dark text-white text-[15px] font-medium px-5 py-2.5 rounded-industrial transition-colors disabled:opacity-60;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-surface border border-border text-graphite text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
+  @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-surface border border-border text-graphite text-[15px] font-medium px-5 py-2.5 rounded-industrial transition-colors disabled:opacity-60;
 }
 
 .btn-icon {
-  @apply inline-flex items-center justify-center w-8 h-8 rounded-industrial border border-border bg-white text-steel hover:text-graphite hover:bg-surface transition-colors;
+  @apply inline-flex items-center justify-center w-11 h-11 rounded-industrial border border-border bg-white text-steel hover:text-graphite hover:bg-surface transition-colors;
 }
 
 .badge-demo {
@@ -36,23 +36,23 @@ body {
 }
 
 .page-title {
-  @apply text-2xl font-bold text-graphite tracking-tight;
+  @apply text-[36px] leading-[1.15] font-extrabold text-graphite tracking-tight;
 }
 
 .page-subtitle {
-  @apply text-sm text-steel mt-1;
+  @apply text-[17px] text-steel mt-2;
 }
 
 .th {
-  @apply text-left text-[11px] font-semibold uppercase tracking-wide text-steel px-4 py-2.5;
+  @apply text-left text-[12px] font-semibold uppercase tracking-wide text-graphite/80 px-4 py-3.5 bg-[#f6f7f9];
 }
 
 .td {
-  @apply px-4 py-3 text-sm align-middle;
+  @apply px-4 py-4 text-[15px] align-middle;
 }
 
 .tab {
-  @apply px-4 py-2.5 text-sm font-medium text-steel border-b-2 border-transparent hover:text-graphite transition-colors;
+  @apply px-5 py-3.5 text-[15px] font-medium text-steel border-b-2 border-transparent hover:text-graphite transition-colors;
 }
 
 .tab-active {
@@ -60,5 +60,5 @@ body {
 }
 
 .input {
-  @apply w-full border border-border rounded-industrial px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand;
+  @apply w-full border border-border rounded-industrial px-3.5 py-2.5 text-[15px] bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand;
 }

@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Scan, RotateCcw, Maximize2 } from "lucide-react";
+import { ZoomIn, ZoomOut, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Scan, RotateCcw, RotateCw, Maximize2 } from "lucide-react";
 import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse } from "@/lib/api";
-import { DemoBadge, StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
+import { StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
 import ReferenceBomPanel from "@/components/ReferenceBomPanel";
+import PageHeader from "@/components/PageHeader";
 
 function OcrOverlay({
   evidence,
@@ -234,44 +234,42 @@ export default function DrawingViewerPage() {
       ];
 
   return (
-    <div className="px-8 pb-6 pt-2">
-      <div className="text-xs text-steel-light mb-1 flex items-center gap-1">
-        <Link href="/drawings" className="hover:text-brand">Drawing Library</Link>
-        <ChevronRight size={12} />
-        <span>{drawing.drawing_number}</span>
-      </div>
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h1 className="page-title">
-            {drawing.drawing_number}
-            {drawing.title ? ` - ${drawing.title}` : ""}
-          </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <StatusBadge status={drawing.status} />
-            {drawing.is_demo && <DemoBadge />}
-            {drawing.status === "Failed" && (
-              <button
-                className="text-xs underline text-red-700"
-                onClick={() => setShowJobDetails((s) => !s)}
-                title={drawing.job_failure_reason || drawing.error_message || "Processing failed"}
-              >
-                processing details{drawing.job_retry_count ? ` (retry ${drawing.job_retry_count})` : ""}
-              </button>
-            )}
-          </div>
+    <div className="px-8 pb-6">
+      <PageHeader
+        breadcrumb={[{ label: "Drawing Library", href: "/drawings" }, { label: drawing.drawing_number }]}
+        title={`${drawing.drawing_number}${drawing.title ? ` - ${drawing.title}` : ""}`}
+        actions={
+          drawing.status === "Failed" ? (
+            <button className="btn-secondary" disabled={busy} onClick={reprocess}>
+              <RotateCw size={17} /> Retry Analysis
+            </button>
+          ) : (
+            <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
+              <RotateCw size={17} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
+            </button>
+          )
+        }
+      >
+        <div className="flex items-center gap-2 mt-3">
+          <StatusBadge status={drawing.status} />
+          {drawing.is_demo && (
+            <span className="inline-flex items-center px-4 py-1.5 rounded-md text-[15px] font-medium bg-accent-light text-accent-dark">
+              DEMO DATA
+            </span>
+          )}
+          {drawing.status === "Failed" && (
+            <button
+              className="text-xs underline text-red-700"
+              onClick={() => setShowJobDetails((s) => !s)}
+              title={drawing.job_failure_reason || drawing.error_message || "Processing failed"}
+            >
+              processing details{drawing.job_retry_count ? ` (retry ${drawing.job_retry_count})` : ""}
+            </button>
+          )}
         </div>
-        {drawing.status === "Failed" ? (
-          <button className="btn-secondary" disabled={busy} onClick={reprocess}>
-            <PlayCircle size={15} /> Retry Analysis
-          </button>
-        ) : (
-          <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
-            <PlayCircle size={15} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
-          </button>
-        )}
-      </div>
+      </PageHeader>
 
-      <div className="flex gap-5 h-[calc(100vh-190px)] min-h-[560px]">
+      <div className="flex gap-5 h-[calc(100vh-250px)] min-h-[560px]">
         {/* Left: drawing viewer */}
         <div ref={viewerRef} className="flex-[1.25] min-w-0 card flex flex-col overflow-hidden bg-white">
           <div className="h-12 border-b border-border flex items-center justify-between px-3">

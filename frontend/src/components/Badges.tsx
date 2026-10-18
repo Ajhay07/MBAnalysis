@@ -7,25 +7,25 @@ export function DemoBadge() {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Uploaded: "bg-slate-100 text-slate-600",
+  Uploaded: "bg-[#e4e7ec] text-[#3b4452]",
   Queued: "bg-brand-light text-brand-dark",
   Processing: "bg-brand-light text-brand-dark",
-  NeedsReview: "bg-amber-100 text-amber-800",
-  Reviewed: "bg-emerald-100 text-emerald-700",
+  NeedsReview: "bg-[#dbe8fb] text-[#1d5fc4]",
+  Reviewed: "bg-[#d6f3e3] text-[#14804a]",
   BOMGenerated: "bg-brand-light text-brand-dark",
   Failed: "bg-red-100 text-red-700",
   Cancelled: "bg-gray-100 text-gray-600",
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  NeedsReview: "Needs Review",
+  NeedsReview: "Analyzed",
   BOMGenerated: "BOM Generated",
 };
 
 export function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] || "bg-gray-100 text-gray-600";
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium ${cls}`}>
+    <span className={`inline-flex items-center px-4 py-1.5 rounded-md text-[15px] font-medium ${cls}`}>
       {STATUS_LABELS[status] || status}
     </span>
   );

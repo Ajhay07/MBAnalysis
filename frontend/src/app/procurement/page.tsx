@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText } from "lucide-react";
 import { api, Drawing } from "@/lib/api";
 import { CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
+import PageHeader from "@/components/PageHeader";
 
 function specText(dimensions: any, tolerances: any): string {
   const parts: string[] = [];
@@ -24,15 +25,15 @@ function specText(dimensions: any, tolerances: any): string {
 type Requirements = Awaited<ReturnType<typeof api.purchaseRequirements>>;
 type TabKey = "buy" | "make" | "review";
 
-function KpiCard({ icon, tone, label, value, note }: {
-  icon: React.ReactNode; tone: string; label: string; value: React.ReactNode; note?: React.ReactNode;
+function KpiCard({ icon, label, value, note }: {
+  icon: React.ReactNode; label: string; value: React.ReactNode; note?: React.ReactNode;
 }) {
   return (
-    <div className="card p-4 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-industrial flex items-center justify-center ${tone}`}>{icon}</div>
+    <div className="card px-5 py-4 flex items-center gap-4">
+      <div className="text-accent shrink-0">{icon}</div>
       <div className="min-w-0">
-        <div className="text-xs text-steel">{label}</div>
-        <div className="text-2xl font-bold text-graphite leading-tight">{value}</div>
+        <div className="text-sm text-steel">{label}</div>
+        <div className="text-[28px] font-bold text-graphite leading-tight">{value}</div>
         {note}
       </div>
     </div>
@@ -56,7 +57,8 @@ export default function ProcurementPage() {
   useEffect(() => {
     api.listDrawings().then((ds) => {
       setDrawings(ds);
-      if (ds.length) setSelected(ds[0].id);
+      const withBom = ds.find((d) => d.status === "Reviewed" || d.status === "BOMGenerated");
+      if (ds.length) setSelected((withBom || ds[0]).id);
     });
     api.listSuppliers().then(setSuppliers);
     refreshCatalog();
@@ -132,29 +134,29 @@ export default function ProcurementPage() {
   );
 
   return (
-    <div className="px-8 pb-8 pt-2 max-w-[1200px]">
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="page-title">Procurement / Purchase Requirements</h1>
-          <p className="page-subtitle">Manage items to buy, make in-house, or review.</p>
-        </div>
-        <select className="input !w-80" value={selected} onChange={(e) => setSelected(e.target.value)}>
-          {drawings.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.drawing_number} - {d.title}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="px-8 pb-10">
+      <PageHeader
+        breadcrumb={[{ label: "Procurement" }]}
+        title="Procurement / Purchase Requirements"
+        subtitle="Manage items to buy, make in-house, or review."
+        actions={
+          <select className="input !w-80 !h-12" value={selected} onChange={(e) => setSelected(e.target.value)}>
+            {drawings.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.drawing_number} - {d.title}
+              </option>
+            ))}
+          </select>
+        }
+      />
 
       {summary && (
         <div className="grid grid-cols-4 gap-4 mb-5">
-          <KpiCard icon={<ShoppingCart size={20} />} tone="bg-brand-light text-brand" label="Buy items" value={summary.buy_item_count} />
-          <KpiCard icon={<Settings size={20} />} tone="bg-accent-light text-accent" label="Make items" value={summary.make_item_count} />
-          <KpiCard icon={<Eye size={20} />} tone="bg-slate-100 text-steel" label="Review items" value={summary.review_item_count} />
+          <KpiCard icon={<ShoppingCart size={30} strokeWidth={1.75} />} label="Buy items" value={summary.buy_item_count} />
+          <KpiCard icon={<Settings size={30} strokeWidth={1.75} />} label="Make items" value={summary.make_item_count} />
+          <KpiCard icon={<Eye size={30} strokeWidth={1.75} />} label="Review items" value={summary.review_item_count} />
           <KpiCard
-            icon={<Coins size={20} />}
-            tone="bg-accent-light text-accent"
+            icon={<Coins size={30} strokeWidth={1.75} />}
             label="Estimated purchase cost"
             value={summary.estimated_total_cost != null ? `$${summary.estimated_total_cost.toFixed(2)}` : "—"}
             note={summary.is_partial_estimate && (
@@ -264,14 +266,14 @@ export default function ProcurementPage() {
 
       {tab !== "make" && (
         <div className="card mb-5">
-          <h2 className="text-base font-semibold px-5 pt-5 pb-3">Items to Manufacture In-House ({make.length})</h2>
+          <h2 className="text-lg font-bold px-5 pt-5 pb-3">Items to Manufacture In-House ({make.length})</h2>
           {makeTable}
         </div>
       )}
 
       <div className="card mb-5">
         <div className="px-5 pt-5 pb-3">
-          <h2 className="text-base font-semibold">Source Catalog ({catalogUsage.length})</h2>
+          <h2 className="text-lg font-bold">Source Catalog ({catalogUsage.length})</h2>
           <p className="text-xs text-steel mt-0.5">
             Reference list of known parts — price, stock, and how many BOM lines the OCR/vision pipeline matched to each.
           </p>
@@ -326,7 +328,7 @@ export default function ProcurementPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-base font-semibold px-5 pt-5 pb-3">Suppliers ({suppliers.length})</h2>
+        <h2 className="text-lg font-bold px-5 pt-5 pb-3">Suppliers ({suppliers.length})</h2>
         <ul className="divide-y divide-border border-t border-border">
           {suppliers.map((s) => (
             <li key={s.id} className="px-5 py-3">
