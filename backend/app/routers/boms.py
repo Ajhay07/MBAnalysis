@@ -10,7 +10,7 @@ from app.schemas.api import BomOut, BomLineItemUpdate
 from app.services.bom_service import would_create_cycle, recompute_rollup, build_bom_tree
 from app.services.export_service import (
     bom_to_dataframe, purchase_list_dataframe, material_summary_dataframe,
-    dataframe_to_csv_bytes, dataframe_to_excel_bytes,
+    dataframe_to_csv_bytes, dataframe_to_excel_bytes, bom_to_pdf_bytes,
     bom_export_filename, purchase_list_filename, material_summary_filename,
 )
 
@@ -123,6 +123,17 @@ def export_bom_xlsx(bom_id: str, db: Session = Depends(get_db),
     df = bom_to_dataframe(bom)
     return _respond_file(dataframe_to_excel_bytes(df), bom_export_filename(drawing, "xlsx"),
                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@router.get("/{bom_id}/export/bom.pdf")
+def export_bom_pdf(bom_id: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    bom = db.query(Bom).get(bom_id)
+    if not bom:
+        raise HTTPException(404, "BOM not found")
+    drawing = db.query(Drawing).get(bom.drawing_id)
+    return _respond_file(bom_to_pdf_bytes(bom, drawing), bom_export_filename(drawing, "pdf"),
+                          "application/pdf")
 
 
 @router.get("/{bom_id}/export/purchase-list.csv")

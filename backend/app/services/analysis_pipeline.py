@@ -19,11 +19,13 @@ from datetime import datetime
 
 from app.config import get_settings
 from app.models.models import (
-    Analysis, Component, Drawing, DrawingStatus, AuditLog, Job, JobStage, ReferenceBomTable,
+    Analysis, CatalogComponent, Component, Drawing, DrawingStatus, AuditLog, Job, JobStage,
+    ReferenceBomTable,
 )
 from app.providers import get_provider
 from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
 from app.schemas.analysis import AnalysisResult
+from app.services.catalog_matching import match_catalog_component
 from app.services.classification import classify_component
 from app.services.paddle_ocr import run_page_ocr
 from app.services.bom_candidate_service import build_candidate_bom
@@ -123,10 +125,14 @@ def _load_image_array(path: str) -> np.ndarray | None:
 
 def _persist_result(
     db: Session, drawing: Drawing, analysis: Analysis, result: AnalysisResult, page_override: int | None,
+    catalog: list[CatalogComponent] | None = None,
 ) -> list[Component]:
     """Persists one provider result's components against an already-created Analysis row.
     page_override, when given, forces source_page to the true physical page the image came
-    from (the provider has no way to know this - it only ever sees a single rasterized page)."""
+    from (the provider has no way to know this - it only ever sees a single rasterized page).
+    catalog, when given, is matched against each component's part number/description
+    (app.services.catalog_matching) so a part the shop already buys is cross-referenced
+    automatically - see Component.catalog_component_id."""
     components = []
     # Use the deterministic bom_candidate_service to merge the provider's directly-proposed
     # components with geometry-derived candidates (e.g. fastener quantities counted from
@@ -159,6 +165,11 @@ def _persist_result(
             is_assumption=comp.is_assumption,
             assumption_text=comp.assumption_text,
         )
+        if catalog:
+            matched, score = match_catalog_component(comp.part_number, comp.description, catalog)
+            if matched:
+                component.catalog_component_id = matched.id
+                component.catalog_match_score = score
         db.add(component)
         components.append(component)
     return components
@@ -319,9 +330,11 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
         db.add(analysis)
         db.flush()
 
+        catalog = db.query(CatalogComponent).all()
         all_components: list[Component] = []
         for page_result, page_number in pending_components:
-            all_components.extend(_persist_result(db, drawing, analysis, page_result, page_number))
+            all_components.extend(
+                _persist_result(db, drawing, analysis, page_result, page_number, catalog))
 
         _persist_reference_bom_tables(db, analysis, page_ocr_by_page)
 

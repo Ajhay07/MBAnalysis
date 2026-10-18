@@ -49,6 +49,8 @@ class ComponentOut(BaseModel):
     parent_part_number: str | None = None
     is_assumption: bool | None = None
     assumption_text: str | None = None
+    catalog_component_id: str | None = None
+    catalog_match_score: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -93,6 +95,7 @@ class BomLineItemOut(BaseModel):
     unit_cost: float | None = None
     parent_line_item_id: str | None = None
     component_id: str | None = None
+    catalog_component_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -140,6 +143,7 @@ class CatalogComponentIn(BaseModel):
     supplier_id: str | None = None
     unit_price: float | None = None
     currency: str | None = None
+    stock_quantity: float | None = None
 
 
 class CatalogComponentOut(CatalogComponentIn):

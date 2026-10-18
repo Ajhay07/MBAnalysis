@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Analysis, Bom, BomLineItem, Drawing, DrawingStatus, AuditLog
+from app.models.models import (
+    Analysis, Bom, BomLineItem, CatalogComponent, Drawing, DrawingStatus, AuditLog,
+)
 
 
 class CyclicBomReferenceError(ValueError):
@@ -118,6 +120,14 @@ def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "sy
 
     id_map: dict[str, str] = {}
     for component in analysis.components:
+        # Carry the OCR-to-catalog match (app.services.catalog_matching, applied during the
+        # analysis pipeline) over to the BOM line, and seed unit_cost from the catalog price
+        # when the pipeline didn't already supply one - never overwrites a real cost.
+        unit_cost = None
+        if component.catalog_component_id:
+            catalog_item = db.query(CatalogComponent).get(component.catalog_component_id)
+            if catalog_item:
+                unit_cost = catalog_item.unit_price
         line = BomLineItem(
             bom_id=bom.id,
             component_id=component.id,
@@ -127,6 +137,8 @@ def generate_bom_from_analysis(db: Session, analysis: Analysis, actor: str = "sy
             quantity=component.quantity,
             material=component.material,
             make_buy=component.make_buy,
+            catalog_component_id=component.catalog_component_id,
+            unit_cost=unit_cost,
         )
         db.add(line)
         db.flush()

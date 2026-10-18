@@ -15,6 +15,25 @@ from app.models.models import (
     Drawing, Analysis, Component, Bom, BomLineItem, Supplier, CatalogComponent,
     DrawingStatus, MakeBuy, AuditLog, InventoryLot,
 )
+from app.services.catalog_matching import match_catalog_component
+
+# Baseline purchased-part catalog, deliberately keyed to the same part numbers used by the
+# seeded BUY components above (6205-2RS, 6005-2Z, M6-BOLT, SH-2002-05) so the demo shows the
+# OCR-to-catalog matching feature (app.services.catalog_matching) working out of the box,
+# without requiring a real analysis run first.
+# stock_quantity is deliberately spread across available/low/out-of-stock/unknown so the
+# Purchase Requirements view (app.services.purchase_requirements) shows all four states out
+# of the box, rather than everything looking "fine" in the demo.
+DEMO_CATALOG = [
+    dict(part_number="6205-2RS", description="[DEMO] Deep Groove Ball Bearing", category="Bearing",
+         unit_price=4.25, currency="USD", stock_quantity=50),
+    dict(part_number="6005-2Z", description="[DEMO] Ball Bearing", category="Bearing",
+         unit_price=3.10, currency="USD", stock_quantity=1),  # below the seeded qty=2 -> Low Stock
+    dict(part_number="M6-BOLT", description="[DEMO] Hex Bolt M6x20", category="Fastener",
+         unit_price=0.18, currency="USD", stock_quantity=500),
+    dict(part_number="SH-2002-05", description="[DEMO] Retaining Ring", category="Fastener",
+         unit_price=0.65, currency="USD", stock_quantity=0),  # -> Out of Stock
+]
 
 # Demo inventory lots, deliberately tied to the seeded gearbox/shaft/bracket BOM line items
 # above so the live demo can show a non-trivial availability spread: some AVAILABLE, some
@@ -121,6 +140,12 @@ def seed_demo_data(db, actor: str = "system") -> int:
                          email=None, phone=None, notes="Demo supplier - no real account"))
         db.commit()
 
+    if db.query(CatalogComponent).count() == 0:
+        for row in DEMO_CATALOG:
+            db.add(CatalogComponent(**row))
+        db.commit()
+    catalog = db.query(CatalogComponent).all()
+
     created = 0
     for proj in PROJECTS:
         existing = db.query(Drawing).filter(Drawing.drawing_number == proj["drawing_number"],
@@ -156,6 +181,7 @@ def seed_demo_data(db, actor: str = "system") -> int:
         db.flush()
 
         for c in proj["components"]:
+            matched, score = match_catalog_component(c["part_number"], c["description"], catalog)
             db.add(Component(
                 analysis_id=analysis.id, part_number=c["part_number"], description=c["description"],
                 category=c["category"], quantity=c["quantity"], material=c["material"],
@@ -163,6 +189,8 @@ def seed_demo_data(db, actor: str = "system") -> int:
                 gear_specs=c.get("gear_specs", {}), make_buy=c["make_buy"],
                 confidence=c["confidence"], verification_status=c["verification_status"],
                 source_page=1, source_region={}, source_text="[DEMO] seeded, no source drawing text",
+                catalog_component_id=matched.id if matched else None,
+                catalog_match_score=score if matched else None,
             ))
         db.flush()
 
@@ -170,10 +198,13 @@ def seed_demo_data(db, actor: str = "system") -> int:
         db.add(bom)
         db.flush()
         for comp in db.query(Component).filter(Component.analysis_id == analysis.id).all():
+            catalog_item = next((c for c in catalog if c.id == comp.catalog_component_id), None)
             db.add(BomLineItem(
                 bom_id=bom.id, component_id=comp.id, part_number=comp.part_number,
                 description=comp.description, category=comp.category, quantity=comp.quantity,
                 material=comp.material, make_buy=comp.make_buy,
+                catalog_component_id=comp.catalog_component_id,
+                unit_cost=catalog_item.unit_price if catalog_item else None,
             ))
         db.flush()
         # These seeded BOMs are flat (no parent_line_item_id), but recompute_rollup still needs

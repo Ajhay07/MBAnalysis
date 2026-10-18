@@ -149,6 +149,11 @@ class Component(Base):
     parent_part_number = Column(String, nullable=True)
     is_assumption = Column(Boolean, default=False, nullable=True)
     assumption_text = Column(Text, default="", nullable=True)
+    # Set by app.services.catalog_matching during the analysis pipeline, when this
+    # OCR/vision-extracted component's part number (or description) matches a known
+    # CatalogComponent closely enough. Never fabricated - null means no confident match.
+    catalog_component_id = Column(String, ForeignKey("catalog_components.id"), nullable=True)
+    catalog_match_score = Column(Float, nullable=True)
 
     analysis = relationship("Analysis", back_populates="components")
 
@@ -201,6 +206,11 @@ class BomLineItem(Base):
     make_buy = Column(SAEnum(MakeBuy), default=MakeBuy.REVIEW)
     unit_cost = Column(Float, nullable=True)
     supplier_id = Column(String, ForeignKey("suppliers.id"), nullable=True)
+    # Carried over from Component.catalog_component_id at BOM-generation time (see
+    # app.services.bom_service.generate_bom_from_analysis). Lets the Procurement view show
+    # which line items the OCR/vision pipeline already cross-referenced against the known
+    # component catalog, and seeds unit_cost from the catalog price when not otherwise set.
+    catalog_component_id = Column(String, ForeignKey("catalog_components.id"), nullable=True)
     # `quantity` is qty-per-assembly (how many go into the direct parent, or the
     # top-level count if there is no parent). `total_quantity` is the rolled-up
     # quantity required overall across the nested assembly chain; left null when
@@ -235,6 +245,11 @@ class CatalogComponent(Base):
     # supplier data provides it - never fabricated for existing demo rows (see inventory spec).
     moq = Column(Float, nullable=True)
     lead_time_days = Column(Integer, nullable=True)
+    # On-hand stock of this exact catalog part (distinct from InventoryLot, which tracks raw
+    # material stock for the Make side). Nullable: "unknown" is a real, distinct state from
+    # "zero" - a catalog row imported without a stock count must not be reported as out of
+    # stock. See app.services.purchase_requirements for how this feeds the availability badge.
+    stock_quantity = Column(Float, nullable=True)
 
 
 class RequisitionStatus(str, enum.Enum):
