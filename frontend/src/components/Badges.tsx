@@ -7,21 +7,26 @@ export function DemoBadge() {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  Uploaded: "bg-steel-light/20 text-steel",
-  Queued: "bg-blue-100 text-blue-700",
-  Processing: "bg-blue-100 text-blue-700",
+  Uploaded: "bg-slate-100 text-slate-600",
+  Queued: "bg-brand-light text-brand-dark",
+  Processing: "bg-brand-light text-brand-dark",
   NeedsReview: "bg-amber-100 text-amber-800",
-  Reviewed: "bg-emerald-100 text-emerald-800",
-  BOMGenerated: "bg-emerald-100 text-emerald-800",
+  Reviewed: "bg-emerald-100 text-emerald-700",
+  BOMGenerated: "bg-brand-light text-brand-dark",
   Failed: "bg-red-100 text-red-700",
   Cancelled: "bg-gray-100 text-gray-600",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  NeedsReview: "Needs Review",
+  BOMGenerated: "BOM Generated",
 };
 
 export function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] || "bg-gray-100 text-gray-600";
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-      {status}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium ${cls}`}>
+      {STATUS_LABELS[status] || status}
     </span>
   );
 }
@@ -93,6 +98,42 @@ export function QuantityBasisBadge({
       title={`Quantity basis: ${key.replace(/_/g, " ")}`}
     >
       {label}
+    </span>
+  );
+}
+
+/** Shown on a BOM line/component whose part number or description was automatically
+ * cross-referenced against the known component catalog during OCR/vision analysis (see
+ * backend app.services.catalog_matching). Absent entirely when there was no confident match -
+ * never implies a match that didn't happen. */
+export function CatalogMatchBadge({ catalogPartNumber }: { catalogPartNumber?: string | null }) {
+  if (!catalogPartNumber) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800"
+      title={`Matched to catalog part ${catalogPartNumber}`}
+    >
+      ✓ Catalog
+    </span>
+  );
+}
+
+const STOCK_STYLES: Record<string, string> = {
+  "In Stock": "bg-emerald-100 text-emerald-800",
+  "Low Stock": "bg-amber-100 text-amber-800",
+  "Out of Stock": "bg-red-100 text-red-700",
+  Unknown: "bg-gray-100 text-gray-600",
+};
+
+/** Stock state of a Buy line's matched source-catalog part (see
+ * backend app.services.purchase_requirements._availability). "Unknown" (no stock figure on
+ * file for that catalog row) is a distinct, deliberately neutral state from "Out of Stock" -
+ * never implies confirmed-empty stock that was never actually recorded. */
+export function StockAvailabilityBadge({ status }: { status: string }) {
+  const cls = STOCK_STYLES[status] || STOCK_STYLES.Unknown;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+      {status}
     </span>
   );
 }

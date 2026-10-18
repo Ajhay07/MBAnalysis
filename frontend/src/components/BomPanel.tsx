@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, List, GitBranch } from "lucide-react";
-import { Bom, BomLineItem, BomTreeNode } from "@/lib/api";
+import { Bom, BomLineItem, BomTreeNode, bomExportUrl } from "@/lib/api";
 import { MakeBuyBadge } from "@/components/Badges";
+import { Download } from "lucide-react";
 
 /** Fields every editable BOM row shares, whether rendered flat or inside the tree. The flat
  * list and the tree both pass through this one row + one edit handler - no forked edit logic. */
@@ -50,25 +51,50 @@ export default function BomPanel({ bom, tree, onUpdate }: BomPanelProps) {
 
   return (
     <div className="card p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 className="text-sm font-semibold whitespace-nowrap">
           Bill of Materials v{bom.version} &middot;{" "}
           <span className="text-steel-light font-normal">{bom.status}</span>
         </h2>
-        <div className="flex items-center text-xs border border-border rounded-industrial overflow-hidden">
-          <button
-            className={`flex items-center gap-1 px-2 py-1 ${mode === "tree" ? "bg-ink text-white" : "bg-white"}`}
-            onClick={() => setMode("tree")}
-            disabled={!tree || tree.nodes.length === 0}
-          >
-            <GitBranch size={12} /> Tree view
-          </button>
-          <button
-            className={`flex items-center gap-1 px-2 py-1 border-l border-border ${mode === "flat" ? "bg-ink text-white" : "bg-white"}`}
-            onClick={() => setMode("flat")}
-          >
-            <List size={12} /> Flat view
-          </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center text-xs border border-border rounded-industrial overflow-hidden">
+            <button
+              className={`flex items-center gap-1 px-2 py-1 whitespace-nowrap ${mode === "tree" ? "bg-ink text-white" : "bg-white"}`}
+              onClick={() => setMode("tree")}
+              disabled={!tree || tree.nodes.length === 0}
+            >
+              <GitBranch size={12} /> Tree view
+            </button>
+            <button
+              className={`flex items-center gap-1 px-2 py-1 whitespace-nowrap border-l border-border ${mode === "flat" ? "bg-ink text-white" : "bg-white"}`}
+              onClick={() => setMode("flat")}
+            >
+              <List size={12} /> Flat view
+            </button>
+          </div>
+          <div className="flex items-center text-xs border border-border rounded-industrial overflow-hidden">
+            <a
+              href={bomExportUrl(bom.id, "bom.pdf")}
+              className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-surface"
+              title="Download Bill of Materials as PDF"
+            >
+              <Download size={12} /> PDF
+            </a>
+            <a
+              href={bomExportUrl(bom.id, "bom.xlsx")}
+              className="flex items-center gap-1 px-2 py-1 border-l border-border bg-white hover:bg-surface"
+              title="Download Bill of Materials as Excel"
+            >
+              <Download size={12} /> XLSX
+            </a>
+            <a
+              href={bomExportUrl(bom.id, "bom.csv")}
+              className="flex items-center gap-1 px-2 py-1 border-l border-border bg-white hover:bg-surface"
+              title="Download Bill of Materials as CSV"
+            >
+              <Download size={12} /> CSV
+            </a>
+          </div>
         </div>
       </div>
 

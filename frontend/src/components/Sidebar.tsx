@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard, FolderOpen, ClipboardList, ShoppingCart, Calculator, CheckSquare, LogOut,
-} from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
+import { LayoutDashboard, FolderOpen, ShoppingCart, Calculator, CheckSquare } from "lucide-react";
+import { BrandLogo, BellowsIllustration } from "@/components/Brand";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -17,19 +15,12 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
   return (
-    <aside className="w-60 shrink-0 border-r border-border bg-white flex flex-col">
-      <div className="h-16 flex items-center px-5 border-b border-border">
-        <div className="w-7 h-7 rounded-industrial bg-accent flex items-center justify-center text-white font-bold text-sm">
-          E
-        </div>
-        <div className="ml-2 leading-tight">
-          <div className="text-sm font-semibold">Drawing Intelligence</div>
-          <div className="text-[11px] text-steel">&amp; BOM System</div>
-        </div>
+    <aside className="w-[220px] shrink-0 bg-navy text-white flex flex-col sticky top-0 h-screen">
+      <div className="h-20 flex items-center px-5 border-b border-navy-line">
+        <BrandLogo />
       </div>
-      <nav className="flex-1 py-3">
+      <nav className="pt-4 space-y-0.5">
         {NAV.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
@@ -37,10 +28,8 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-5 py-2.5 text-sm font-medium border-l-2 transition-colors ${
-                active
-                  ? "border-accent text-accent bg-accent-light/40"
-                  : "border-transparent text-steel hover:text-graphite hover:bg-surface"
+              className={`flex items-center gap-3 px-5 py-2.5 text-sm font-medium transition-colors ${
+                active ? "bg-brand text-white" : "text-white/75 hover:text-white hover:bg-white/5"
               }`}
             >
               <Icon size={17} />
@@ -49,25 +38,16 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      {user && (
-        <div className="px-5 py-3 border-t border-border">
-          <div className="text-xs font-medium text-graphite truncate" title={user.email}>
-            {user.email}
-          </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-[11px] uppercase tracking-wide text-steel-light">{user.role}</span>
-            <button
-              onClick={logout}
-              className="flex items-center gap-1 text-[11px] text-steel hover:text-accent-dark"
-              title="Log out"
-            >
-              <LogOut size={13} /> Log out
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="px-5 py-4 border-t border-border text-[11px] text-steel-light">
-        Engineering Drawing Intelligence &amp; BOM System v0.1
+      <div className="flex-1" />
+      <div className="px-5 pb-2 text-xs leading-relaxed text-white/60">
+        Production
+        <br />
+        Engineering
+        <br />
+        R&amp;D Support
+      </div>
+      <div className="overflow-hidden">
+        <BellowsIllustration className="w-[270px] max-w-none h-auto -ml-6 -mb-3" />
       </div>
     </aside>
   );

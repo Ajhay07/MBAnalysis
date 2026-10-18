@@ -7,8 +7,8 @@
 }
 
 body {
-  background-color: #fafaf8;
-  color: #2b2d2f;
+  background-color: #f3f5f8;
+  color: #0f1b2d;
 }
 
 .card {
@@ -16,13 +16,49 @@ body {
 }
 
 .btn-primary {
-  @apply inline-flex items-center gap-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium px-4 py-2 rounded-industrial transition-colors;
+  @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
+}
+
+.btn-accent {
+  @apply inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-dark text-white text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center gap-2 bg-white hover:bg-surface border border-border text-graphite text-sm font-medium px-4 py-2 rounded-industrial transition-colors;
+  @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-surface border border-border text-graphite text-sm font-medium px-4 py-2 rounded-industrial transition-colors disabled:opacity-60;
+}
+
+.btn-icon {
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-industrial border border-border bg-white text-steel hover:text-graphite hover:bg-surface transition-colors;
 }
 
 .badge-demo {
-  @apply inline-flex items-center gap-1 bg-accent-light text-accent-dark text-xs font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide;
+  @apply inline-flex items-center gap-1 bg-accent-light text-accent-dark text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide;
+}
+
+.page-title {
+  @apply text-2xl font-bold text-graphite tracking-tight;
+}
+
+.page-subtitle {
+  @apply text-sm text-steel mt-1;
+}
+
+.th {
+  @apply text-left text-[11px] font-semibold uppercase tracking-wide text-steel px-4 py-2.5;
+}
+
+.td {
+  @apply px-4 py-3 text-sm align-middle;
+}
+
+.tab {
+  @apply px-4 py-2.5 text-sm font-medium text-steel border-b-2 border-transparent hover:text-graphite transition-colors;
+}
+
+.tab-active {
+  @apply text-brand border-brand;
+}
+
+.input {
+  @apply w-full border border-border rounded-industrial px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand;
 }

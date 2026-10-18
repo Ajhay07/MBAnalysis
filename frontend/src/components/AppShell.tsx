@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import TopBar from "@/components/TopBar";
 import { useAuth } from "@/lib/auth-context";
 
 /** Route-protection wrapper: redirects every page except /login to /login when there is no
@@ -37,7 +38,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 min-w-0">{children}</main>
+      <main className="flex-1 min-w-0">
+        <TopBar />
+        {children}
+      </main>
     </div>
   );
 }

@@ -28,7 +28,7 @@ def get_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_
     recent = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(10).all()
     recent_activity = [{
         "entity_type": a.entity_type, "entity_id": a.entity_id, "action": a.action,
-        "created_at": a.created_at.isoformat(),
+        "details": a.details, "actor": a.actor, "created_at": a.created_at.isoformat(),
     } for a in recent]
 
     return DashboardMetrics(

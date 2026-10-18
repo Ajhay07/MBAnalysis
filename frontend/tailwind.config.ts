@@ -5,22 +5,33 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        surface: "#fafaf8",
-        graphite: "#2b2d2f",
-        steel: "#5b6166",
-        "steel-light": "#8b9196",
-        border: "#e2e1dc",
+        surface: "#f3f5f8",
+        graphite: "#0f1b2d",
+        ink: "#0f1b2d",
+        steel: "#5a6576",
+        "steel-light": "#8a94a3",
+        border: "#e3e8ef",
+        navy: {
+          DEFAULT: "#0e1d30",
+          light: "#16294180",
+          line: "#1f3550",
+        },
+        brand: {
+          DEFAULT: "#1f6feb",
+          dark: "#1658c4",
+          light: "#e8f0fe",
+        },
         accent: {
-          DEFAULT: "#d2601a",
-          dark: "#b3500f",
-          light: "#f4e3d3",
+          DEFAULT: "#f26b1d",
+          dark: "#d9590f",
+          light: "#fde9dc",
         },
       },
       borderRadius: {
-        industrial: "10px",
+        industrial: "8px",
       },
       boxShadow: {
-        industrial: "0 1px 2px rgba(20,20,20,0.06), 0 1px 1px rgba(20,20,20,0.04)",
+        industrial: "0 1px 2px rgba(15,27,45,0.05), 0 1px 3px rgba(15,27,45,0.04)",
       },
       fontFamily: {
         sans: ["Inter", "Segoe UI", "system-ui", "sans-serif"],

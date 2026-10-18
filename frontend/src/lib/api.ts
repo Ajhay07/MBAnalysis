@@ -99,6 +99,11 @@ export interface Component {
   parent_part_number?: string | null;
   is_assumption?: boolean | null;
   assumption_text?: string | null;
+  // Set by app.services.catalog_matching during the analysis pipeline when this component's
+  // part number/description matched a known Source Catalog row closely enough. Null means no
+  // confident match - never implies one.
+  catalog_component_id?: string | null;
+  catalog_match_score?: number | null;
 }
 
 export interface Analysis {
@@ -167,7 +172,10 @@ export interface DashboardMetrics {
   make_count: number;
   buy_count: number;
   review_count: number;
-  recent_activity: { entity_type: string; entity_id: string; action: string; created_at: string }[];
+  recent_activity: {
+    entity_type: string; entity_id: string; action: string; created_at: string;
+    details?: Record<string, unknown> | null; actor?: string | null;
+  }[];
 }
 
 export interface OcrRegion {
@@ -331,6 +339,12 @@ export const api = {
   rejectBom: (id: string) => request<{ ok: boolean }>(`/api/boms/${id}/reject`, { method: "POST" }),
 
   reviewQueue: () => request<any[]>("/api/review/queue"),
+  reviewComponents: () =>
+    request<{
+      component_id: string; drawing_id: string; drawing_number: string; drawing_title: string;
+      file_type: string; part_number: string; description: string; category: string; quantity: number;
+      confidence: number; low_confidence: boolean; verification_status: string; make_buy: string;
+    }[]>("/api/review/components"),
   auditTrail: (entityType?: string, entityId?: string) => {
     const sp = new URLSearchParams();
     if (entityType) sp.set("entity_type", entityType);
@@ -343,6 +357,25 @@ export const api = {
     request<{ buy: any[]; make: any[]; review: any[] }>(`/api/procurement/by-drawing/${drawingId}`),
   listSuppliers: () => request<any[]>("/api/procurement/suppliers"),
   listCatalog: () => request<any[]>("/api/procurement/catalog"),
+  catalogUsage: () => request<any[]>("/api/procurement/catalog/usage"),
+  createCatalogItem: (payload: {
+    part_number: string; description?: string; category?: string; unit_price?: number | null;
+    currency?: string | null; stock_quantity?: number | null;
+  }) =>
+    request<any>("/api/procurement/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  purchaseRequirements: (drawingId: string) =>
+    request<{
+      bom_id: string | null; buy: any[]; make: any[]; review: any[];
+      summary: {
+        buy_item_count: number; make_item_count: number; review_item_count: number;
+        estimated_total_cost: number | null; buy_items_missing_price: number;
+        is_partial_estimate: boolean;
+      };
+    }>(`/api/procurement/purchase-requirements/${drawingId}`),
 
   loadDemo: () => request<{ ok: boolean; created: number }>("/api/demo/load", { method: "POST" }),
   resetDemo: () => request<{ ok: boolean }>("/api/demo/reset", { method: "POST" }),
@@ -380,6 +413,9 @@ export function drawingPagePreviewUrl(id: string, pageNumber: number): string {
   return `/api/drawings/${id}/pages/${pageNumber}/preview`;
 }
 
-export function bomExportUrl(bomId: string, kind: "bom.csv" | "bom.xlsx" | "purchase-list.csv" | "material-summary.csv"): string {
+export function bomExportUrl(
+  bomId: string,
+  kind: "bom.csv" | "bom.xlsx" | "bom.pdf" | "purchase-list.csv" | "material-summary.csv"
+): string {
   return `/api/boms/${bomId}/export/${kind}`;
 }

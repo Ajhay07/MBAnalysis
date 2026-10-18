@@ -4,7 +4,7 @@ import AppShell from "@/components/AppShell";
 import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
-  title: "Engineering Drawing Intelligence & BOM System",
+  title: "MB Metallic Bellows · Drawing Intelligence",
   description: "AI-assisted engineering drawing analysis and BOM generation",
 };
 

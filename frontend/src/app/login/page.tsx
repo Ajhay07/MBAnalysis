@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { BrandLogo } from "@/components/Brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,12 +48,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface px-4">
       <div className="card bg-white p-8 w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-7 h-7 rounded-industrial bg-accent flex items-center justify-center text-white font-bold text-sm">
-            E
-          </div>
-          <div className="text-sm font-semibold">Drawing Intelligence &amp; BOM System</div>
-        </div>
+        <BrandLogo dark={false} />
+        <div className="text-xs text-steel mt-3">Drawing Intelligence &amp; BOM System</div>
         <h1 className="text-lg font-semibold mt-5 mb-1">Sign in</h1>
         <p className="text-sm text-steel mb-5">Log in with your account to continue.</p>
 

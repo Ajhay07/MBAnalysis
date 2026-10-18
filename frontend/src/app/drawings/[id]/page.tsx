@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { ZoomIn, ZoomOut, PlayCircle, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Scan, RotateCcw, Maximize2 } from "lucide-react";
 import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse } from "@/lib/api";
-import { DemoBadge, StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote } from "@/components/Badges";
+import { DemoBadge, StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
 import ReferenceBomPanel from "@/components/ReferenceBomPanel";
@@ -71,6 +72,24 @@ export default function DrawingViewerPage() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
   const [referenceBom, setReferenceBom] = useState<ReferenceBomResponse | null>(null);
+  const [catalogById, setCatalogById] = useState<Record<string, any>>({});
+  const [tab, setTab] = useState<"info" | "components" | "bom">("info");
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+
+  const fitToView = useCallback((size = imgSize) => {
+    const box = canvasRef.current;
+    if (!box || !size) return setZoom(1);
+    const fit = Math.min((box.clientWidth - 48) / size.w, (box.clientHeight - 48) / size.h);
+    setZoom(Math.max(0.1, Math.min(4, Math.round(fit * 100) / 100)));
+  }, [imgSize]);
+
+  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const size = { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight };
+    if (!imgSize) fitToView(size);
+    setImgSize(size);
+  }
 
   const load = useCallback(async () => {
     const d = await api.getDrawing(id);
@@ -84,6 +103,8 @@ export default function DrawingViewerPage() {
     setBom(latestBom);
     setBomTree(latestBom ? await api.getBomTree(latestBom.id) : null);
     setJobs(await api.listDrawingJobs(id));
+    const catalog = await api.listCatalog();
+    setCatalogById(Object.fromEntries(catalog.map((c: any) => [c.id, c])));
   }, [id]);
 
   async function reprocess() {
@@ -186,13 +207,46 @@ export default function DrawingViewerPage() {
     return <div className="p-8 text-steel text-sm">Loading drawing...</div>;
   }
 
+  const pageCount = activeAnalysis?.page_count ?? 1;
+  const components = activeAnalysis?.components ?? [];
+
+  function catalogStatus(c: Component): string {
+    const cat = c.catalog_component_id ? catalogById[c.catalog_component_id] : null;
+    if (!cat || cat.stock_quantity == null) return "Unknown";
+    if (cat.stock_quantity <= 0) return "Out of Stock";
+    if (cat.stock_quantity < c.quantity) return "Low Stock";
+    return "In Stock";
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else viewerRef.current?.requestFullscreen();
+  }
+
+  const titleBlockRows: [string, string][] = activeAnalysis
+    ? Object.entries(activeAnalysis.title_block).map(([k, v]) => [k.replace(/_/g, " "), String(v)])
+    : [
+        ["drawing number", drawing.drawing_number],
+        ["title", drawing.title],
+        ["revision", drawing.revision],
+        ["units", drawing.units],
+        ["scale", drawing.scale || "n/a"],
+      ];
+
   return (
-    <div className="flex h-screen">
-      {/* Left pane: preview */}
-      <div className="w-1/2 border-r border-border bg-white flex flex-col">
-        <div className="h-14 border-b border-border flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs">{drawing.drawing_number}</span>
+    <div className="px-8 pb-6 pt-2">
+      <div className="text-xs text-steel-light mb-1 flex items-center gap-1">
+        <Link href="/drawings" className="hover:text-brand">Drawing Library</Link>
+        <ChevronRight size={12} />
+        <span>{drawing.drawing_number}</span>
+      </div>
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h1 className="page-title">
+            {drawing.drawing_number}
+            {drawing.title ? ` - ${drawing.title}` : ""}
+          </h1>
+          <div className="flex items-center gap-2 mt-2">
             <StatusBadge status={drawing.status} />
             {drawing.is_demo && <DemoBadge />}
             {drawing.status === "Failed" && (
@@ -205,271 +259,368 @@ export default function DrawingViewerPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`text-xs px-2 py-1 rounded-industrial border ${showOcrEvidence ? "bg-ink text-white border-ink" : "border-border text-steel"}`}
-              onClick={() => setShowOcrEvidence((s) => !s)}
-              title="Toggle raw OCR text-region overlay (distinct from AI-interpreted components below)"
-            >
-              OCR Evidence
-            </button>
-            <button className="btn-secondary !px-2 !py-1" onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>
-              <ZoomOut size={14} />
-            </button>
-            <span className="text-xs w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button className="btn-secondary !px-2 !py-1" onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
-              <ZoomIn size={14} />
-            </button>
-          </div>
         </div>
-        <div className="flex-1 overflow-auto bg-[#f2f1ec] flex items-center justify-center p-6">
-          {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 ? (
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: "center" }} className="relative inline-block transition-transform">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={drawingPagePreviewUrl(drawing.id, page)}
-                alt={`${drawing.title || drawing.drawing_number} - page ${page}`}
-                className="max-w-none block"
-              />
-              {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
-            </div>
-          ) : drawing.file_type === "pdf" ? (
-            <embed src={drawingFileUrl(drawing.id)} type="application/pdf" className="w-full h-full" />
-          ) : (
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: "center" }} className="relative inline-block transition-transform">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={drawingFileUrl(drawing.id)} alt={drawing.title} className="max-w-none block" />
-              {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
-            </div>
-          )}
-        </div>
-        {showOcrEvidence && (
-          <div className="border-t border-border p-3 bg-white text-xs max-h-56 overflow-auto">
-            <div className="font-semibold mb-2 flex items-center justify-between">
-              <span>Raw OCR Evidence (page {page}) &mdash; not human-reviewed</span>
-              {ocrEvidence && <span className="text-steel-light font-normal">threshold {(ocrEvidence.confidence_threshold * 100).toFixed(0)}%</span>}
-            </div>
-            {ocrLoading && <div className="text-steel">Loading OCR regions...</div>}
-            {!ocrLoading && ocrEvidence && !ocrEvidence.configured && (
-              <div className="text-red-700">{ocrEvidence.error || "OCR not available."}</div>
-            )}
-            {!ocrLoading && ocrEvidence?.configured && ocrEvidence.regions.length === 0 && (
-              <div className="text-steel">No text regions detected on this page.</div>
-            )}
-            {selectedRegion ? (
-              <div className="border border-border rounded p-2 bg-[#f8f7f2]">
-                <div className="font-mono">{selectedRegion.text}</div>
-                <div className="text-steel-light mt-1">
-                  confidence {(selectedRegion.confidence * 100).toFixed(0)}%
-                  {selectedRegion.low_confidence && <span className="text-amber-700 font-semibold"> &middot; needs review</span>}
-                  {" "}&middot; page {page} &middot; bbox {JSON.stringify(selectedRegion.bbox)}
-                </div>
-              </div>
-            ) : (
-              ocrEvidence?.configured && ocrEvidence.regions.length > 0 && (
-                <div className="text-steel">Click a highlighted region above to inspect it.</div>
-              )
-            )}
-            {ocrEvidence && ocrEvidence.regions.some((r) => r.low_confidence) && (
-              <div className="mt-2">
-                <div className="font-semibold text-amber-800">Needs review ({ocrEvidence.regions.filter((r) => r.low_confidence).length})</div>
-                <ul className="list-disc list-inside">
-                  {ocrEvidence.regions.filter((r) => r.low_confidence).map((r, i) => (
-                    <li key={i} className="cursor-pointer hover:underline" onClick={() => setSelectedRegion(r)}>
-                      {r.text} ({(r.confidence * 100).toFixed(0)}%)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-        {drawing.file_type === "pdf" && (activeAnalysis?.page_count ?? 1) > 1 && (
-          <div className="h-12 border-t border-border flex items-center justify-center gap-3">
-            <button
-              className="btn-secondary !px-2 !py-1"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-xs">
-              Page {page} of {activeAnalysis?.page_count ?? 1}
-            </span>
-            <button
-              className="btn-secondary !px-2 !py-1"
-              disabled={page >= (activeAnalysis?.page_count ?? 1)}
-              onClick={() => setPage((p) => Math.min(activeAnalysis?.page_count ?? 1, p + 1))}
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
+        {drawing.status === "Failed" ? (
+          <button className="btn-secondary" disabled={busy} onClick={reprocess}>
+            <PlayCircle size={15} /> Retry Analysis
+          </button>
+        ) : (
+          <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
+            <PlayCircle size={15} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
+          </button>
         )}
       </div>
 
-      {/* Right pane: analysis workspace */}
-      <div className="w-1/2 overflow-auto p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-lg font-semibold">{drawing.title || drawing.drawing_number}</h1>
-            <p className="text-xs text-steel">
-              Rev {drawing.revision} &middot; {drawing.units} &middot; Scale {drawing.scale || "n/a"}
-            </p>
+      <div className="flex gap-5 h-[calc(100vh-190px)] min-h-[560px]">
+        {/* Left: drawing viewer */}
+        <div ref={viewerRef} className="flex-[1.25] min-w-0 card flex flex-col overflow-hidden bg-white">
+          <div className="h-12 border-b border-border flex items-center justify-between px-3">
+            <div className="flex items-center gap-1.5">
+              <button className="btn-icon" title="Fit to view" onClick={() => fitToView()}>
+                <Scan size={15} />
+              </button>
+              <button className="btn-icon" title="Zoom out" onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}>
+                <ZoomOut size={15} />
+              </button>
+              <button className="btn-icon" title="Zoom in" onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
+                <ZoomIn size={15} />
+              </button>
+              <button className="btn-icon" title="Reset zoom" onClick={() => setZoom(1)}>
+                <RotateCcw size={15} />
+              </button>
+              <select
+                className="input !w-24 !py-1.5 ml-1"
+                value={zoom}
+                onChange={(e) => setZoom(parseFloat(e.target.value))}
+              >
+                {[0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4].concat([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4].includes(zoom) ? [] : [zoom]).map((z) => (
+                  <option key={z} value={z}>
+                    {Math.round(z * 100)}%
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                className={`text-xs px-2.5 py-1.5 rounded-industrial border font-medium ${showOcrEvidence ? "bg-ink text-white border-ink" : "border-border text-steel hover:text-graphite"}`}
+                onClick={() => setShowOcrEvidence((s) => !s)}
+                title="Toggle raw OCR text-region overlay (distinct from AI-interpreted components)"
+              >
+                OCR Evidence
+              </button>
+              <button className="btn-icon" title="Full screen" onClick={toggleFullscreen}>
+                <Maximize2 size={15} />
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            {drawing.status === "Failed" ? (
-              <button className="btn-secondary" disabled={busy} onClick={reprocess}>
-                <PlayCircle size={15} /> Retry Analysis
-              </button>
+          <div ref={canvasRef} className="flex-1 overflow-auto bg-[#eef1f5] flex p-6">
+            {drawing.file_type === "pdf" && pageCount > 1 ? (
+              <div style={imgSize ? { width: imgSize.w * zoom, height: imgSize.h * zoom } : undefined} className="relative shrink-0 m-auto">
+              <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }} className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={drawingPagePreviewUrl(drawing.id, page)}
+                  alt={`${drawing.title || drawing.drawing_number} - page ${page}`}
+                  className="max-w-none block bg-white shadow-industrial"
+                  onLoad={onImageLoad}
+                />
+                {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
+              </div>
+              </div>
+            ) : drawing.file_type === "pdf" ? (
+              <embed src={drawingFileUrl(drawing.id)} type="application/pdf" className="w-full h-full" />
             ) : (
-              <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
-                <PlayCircle size={15} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
-              </button>
+              <div style={imgSize ? { width: imgSize.w * zoom, height: imgSize.h * zoom } : undefined} className="relative shrink-0 m-auto">
+              <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }} className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={drawingFileUrl(drawing.id)} alt={drawing.title} className="max-w-none block bg-white shadow-industrial" onLoad={onImageLoad} />
+                {showOcrEvidence && ocrEvidence && <OcrOverlay evidence={ocrEvidence} selected={selectedRegion} onSelect={setSelectedRegion} />}
+              </div>
+              </div>
             )}
           </div>
+          {showOcrEvidence && (
+            <div className="border-t border-border p-3 bg-white text-xs max-h-56 overflow-auto">
+              <div className="font-semibold mb-2 flex items-center justify-between">
+                <span>Raw OCR Evidence (page {page}) &mdash; not human-reviewed</span>
+                {ocrEvidence && <span className="text-steel-light font-normal">threshold {(ocrEvidence.confidence_threshold * 100).toFixed(0)}%</span>}
+              </div>
+              {ocrLoading && <div className="text-steel">Loading OCR regions...</div>}
+              {!ocrLoading && ocrEvidence && !ocrEvidence.configured && (
+                <div className="text-red-700">{ocrEvidence.error || "OCR not available."}</div>
+              )}
+              {!ocrLoading && ocrEvidence?.configured && ocrEvidence.regions.length === 0 && (
+                <div className="text-steel">No text regions detected on this page.</div>
+              )}
+              {selectedRegion ? (
+                <div className="border border-border rounded p-2 bg-surface">
+                  <div className="font-mono">{selectedRegion.text}</div>
+                  <div className="text-steel-light mt-1">
+                    confidence {(selectedRegion.confidence * 100).toFixed(0)}%
+                    {selectedRegion.low_confidence && <span className="text-amber-700 font-semibold"> &middot; needs review</span>}
+                    {" "}&middot; page {page} &middot; bbox {JSON.stringify(selectedRegion.bbox)}
+                  </div>
+                </div>
+              ) : (
+                ocrEvidence?.configured && ocrEvidence.regions.length > 0 && (
+                  <div className="text-steel">Click a highlighted region above to inspect it.</div>
+                )
+              )}
+              {ocrEvidence && ocrEvidence.regions.some((r) => r.low_confidence) && (
+                <div className="mt-2">
+                  <div className="font-semibold text-amber-800">Needs review ({ocrEvidence.regions.filter((r) => r.low_confidence).length})</div>
+                  <ul className="list-disc list-inside">
+                    {ocrEvidence.regions.filter((r) => r.low_confidence).map((r, i) => (
+                      <li key={i} className="cursor-pointer hover:underline" onClick={() => setSelectedRegion(r)}>
+                        {r.text} ({(r.confidence * 100).toFixed(0)}%)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {drawing.file_type === "pdf" && pageCount > 1 && (
+            <div className="h-11 border-t border-border flex items-center justify-center gap-3">
+              <button className="btn-icon" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                <ChevronLeft size={14} />
+              </button>
+              <span className="text-xs">
+                Page {page} of {pageCount}
+              </span>
+              <button className="btn-icon" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
-        {showJobDetails && jobs.length > 0 && (
-          <div className="mb-4 border border-border rounded p-3 bg-[#f8f7f2] text-xs space-y-2">
-            <div className="font-semibold">Processing details</div>
-            {jobs.map((j) => (
-              <div key={j.id} className="flex justify-between gap-2 border-b border-border/50 pb-1 last:border-0">
-                <span className="font-mono">{j.stage}</span>
-                <span>{j.status}</span>
-                <span>retry {j.retry_count}</span>
-                {j.failure_reason && <span className="text-red-700 truncate max-w-[50%]" title={j.failure_reason}>{j.failure_reason}</span>}
-              </div>
-            ))}
+        {/* Right: tabbed analysis panel */}
+        <div className="flex-1 min-w-[380px] card flex flex-col overflow-hidden">
+          <div className="flex border-b border-border px-2">
+            <button className={`tab ${tab === "info" ? "tab-active" : ""}`} onClick={() => setTab("info")}>
+              Information
+            </button>
+            <button className={`tab ${tab === "components" ? "tab-active" : ""}`} onClick={() => setTab("components")}>
+              Components ({components.length})
+            </button>
+            <button className={`tab ${tab === "bom" ? "tab-active" : ""}`} onClick={() => setTab("bom")}>
+              BOM{bom ? ` v${bom.version}` : ""}
+            </button>
           </div>
-        )}
 
-        {drawing.error_message && (
-          <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-industrial p-3">
-            {drawing.error_message}
-          </div>
-        )}
-
-        {!activeAnalysis && (
-          <div className="card p-6 text-sm text-steel text-center">
-            No analysis yet. Click &quot;Run Analysis&quot; to extract the title block, dimensions, and
-            component candidates ({drawing.is_demo ? "demo data" : "using configured AI provider"}).
-          </div>
-        )}
-
-        {activeAnalysis && (
-          <>
-            <div className="card p-4 mb-4">
-              <h2 className="text-sm font-semibold mb-2 flex items-center justify-between">
-                Title Block
-                <span className="text-xs font-normal text-steel-light">
-                  provider: {activeAnalysis.provider} &middot; confidence{" "}
-                  {(activeAnalysis.overall_confidence * 100).toFixed(0)}%
-                </span>
-              </h2>
-              <dl className="grid grid-cols-2 gap-y-1 text-sm">
-                {Object.entries(activeAnalysis.title_block).map(([k, v]) => (
-                  <div key={k} className="contents">
-                    <dt className="text-steel capitalize">{k.replace(/_/g, " ")}</dt>
-                    <dd className="font-medium">{String(v)}</dd>
+          <div className="flex-1 overflow-auto p-5">
+            {showJobDetails && jobs.length > 0 && (
+              <div className="mb-4 border border-border rounded p-3 bg-surface text-xs space-y-2">
+                <div className="font-semibold">Processing details</div>
+                {jobs.map((j) => (
+                  <div key={j.id} className="flex justify-between gap-2 border-b border-border/50 pb-1 last:border-0">
+                    <span className="font-mono">{j.stage}</span>
+                    <span>{j.status}</span>
+                    <span>retry {j.retry_count}</span>
+                    {j.failure_reason && <span className="text-red-700 truncate max-w-[50%]" title={j.failure_reason}>{j.failure_reason}</span>}
                   </div>
                 ))}
-              </dl>
-            </div>
-
-            <div className="card p-4 mb-4">
-              <h2 className="text-sm font-semibold mb-2">Materials</h2>
-              <div className="flex flex-wrap gap-2">
-                {activeAnalysis.materials.length === 0 && <span className="text-sm text-steel">None detected.</span>}
-                {activeAnalysis.materials.map((m, i) => (
-                  <span key={i} className="text-xs bg-surface border border-border rounded-full px-2 py-1">
-                    {m}
-                  </span>
-                ))}
               </div>
-            </div>
+            )}
 
-            {referenceBom && <ReferenceBomPanel reference={referenceBom} />}
+            {drawing.error_message && (
+              <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-industrial p-3">
+                {drawing.error_message}
+              </div>
+            )}
 
-            <div className="card p-4 mb-4">
-              <h2 className="text-sm font-semibold mb-1">
-                Interpreted Component Candidates ({activeAnalysis.components.length})
-              </h2>
-              <p className="text-xs text-steel-light mb-3">
-                AI-interpreted engineering values, human-gated by Verified/Unverified/Rejected and
-                Make/Buy/Review below &mdash; distinct from the raw OCR Evidence panel above, which
-                shows unreviewed machine-read text only.
-              </p>
-              <div className="space-y-3">
-                {activeAnalysis.components.map((c) => (
-                  <div key={c.id} className="border border-border rounded-industrial p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="font-mono text-xs">{c.part_number || "(no part number)"}</div>
-                      <div className="flex items-center gap-2">
-                        <QuantityBasisBadge basis={c.quantity_basis} count={c.quantity} />
-                        <AssumptionNote isAssumption={c.is_assumption} text={c.assumption_text} />
-                        <MakeBuyBadge value={c.make_buy} />
-                        <span className="text-xs text-steel-light">{(c.confidence * 100).toFixed(0)}% conf.</span>
+            {tab === "info" && (
+              <>
+                <section className="mb-5">
+                  <h2 className="text-sm font-semibold mb-2 flex items-center justify-between">
+                    Drawing Information
+                    {activeAnalysis && (
+                      <span className="text-[11px] font-normal text-steel-light">
+                        {activeAnalysis.provider} &middot; {(activeAnalysis.overall_confidence * 100).toFixed(0)}% conf.
+                      </span>
+                    )}
+                  </h2>
+                  <dl className="grid grid-cols-[130px_1fr] gap-y-1.5 text-sm">
+                    {titleBlockRows.map(([k, v]) => (
+                      <div key={k} className="contents">
+                        <dt className="text-steel capitalize">{k}</dt>
+                        <dd className="text-graphite">{v}</dd>
                       </div>
-                    </div>
-                    <div className="text-sm">{c.description}</div>
-                    <div className="text-xs text-steel mt-1">
-                      {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
-                      {(activeAnalysis?.page_count ?? 1) > 1 && (
-                        <>
-                          {" "}
-                          &middot;{" "}
-                          <button
-                            className="underline hover:text-ink"
-                            onClick={() => setPage(c.source_page || 1)}
-                          >
-                            Page {c.source_page || 1}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <select
-                        className="text-xs border border-border rounded px-2 py-1"
-                        value={c.make_buy}
-                        onChange={(e) => updateComponent(c, { make_buy: e.target.value })}
-                      >
-                        <option>Make</option>
-                        <option>Buy</option>
-                        <option>Review</option>
-                      </select>
-                      <select
-                        className="text-xs border border-border rounded px-2 py-1"
-                        value={c.verification_status}
-                        onChange={(e) => updateComponent(c, { verification_status: e.target.value })}
-                      >
-                        <option>Unverified</option>
-                        <option>Verified</option>
-                        <option>Rejected</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                    ))}
+                  </dl>
+                </section>
 
-            <div className="flex gap-2">
-              <button className="btn-secondary" onClick={approve}>
+                {activeAnalysis && (
+                  <section className="mb-5">
+                    <h2 className="text-sm font-semibold mb-2">Materials</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {activeAnalysis.materials.length === 0 && <span className="text-sm text-steel">None detected.</span>}
+                      {activeAnalysis.materials.map((m, i) => (
+                        <span key={i} className="text-xs bg-surface border border-border rounded-full px-2.5 py-1">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {!activeAnalysis && (
+                  <div className="border border-dashed border-border rounded-industrial p-6 text-sm text-steel text-center">
+                    No analysis yet. Click &quot;Run Analysis&quot; to extract the title block, dimensions, and
+                    component candidates ({drawing.is_demo ? "demo data" : "using configured AI provider"}).
+                  </div>
+                )}
+
+                {activeAnalysis && (
+                  <section>
+                    <h2 className="text-sm font-semibold mb-1">Interpreted Components ({components.length})</h2>
+                    <p className="text-xs text-steel-light mb-3">
+                      AI-interpreted values, human-gated by Verified/Unverified/Rejected and Make/Buy/Review.
+                    </p>
+                    <div className="space-y-3">
+                      {components.map((c) => {
+                        const cat = c.catalog_component_id ? catalogById[c.catalog_component_id] : null;
+                        return (
+                          <div key={c.id} className="border border-border rounded-industrial p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="font-semibold text-sm">{c.part_number || "(no part number)"}</div>
+                              <div className="flex items-center gap-2">
+                                <QuantityBasisBadge basis={c.quantity_basis} count={c.quantity} />
+                                <AssumptionNote isAssumption={c.is_assumption} text={c.assumption_text} />
+                                <MakeBuyBadge value={c.make_buy} />
+                                <span className="text-xs text-steel-light">{(c.confidence * 100).toFixed(0)}%</span>
+                              </div>
+                            </div>
+                            <div className="text-sm">{c.description}</div>
+                            <div className="text-xs text-steel mt-0.5">
+                              {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
+                              {pageCount > 1 && (
+                                <>
+                                  {" "}&middot;{" "}
+                                  <button className="underline hover:text-ink" onClick={() => setPage(c.source_page || 1)}>
+                                    Page {c.source_page || 1}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                            {cat && (
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <CatalogMatchBadge catalogPartNumber={cat.part_number} />
+                                <span className="text-xs text-steel">
+                                  {cat.unit_price != null ? `$${cat.unit_price}` : "price n/a"}
+                                </span>
+                                <StockAvailabilityBadge status={catalogStatus(c)} />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2 mt-2">
+                              <select
+                                className="input !w-auto !py-1 !text-xs"
+                                value={c.make_buy}
+                                onChange={(e) => updateComponent(c, { make_buy: e.target.value })}
+                              >
+                                <option>Make</option>
+                                <option>Buy</option>
+                                <option>Review</option>
+                              </select>
+                              <select
+                                className="input !w-auto !py-1 !text-xs"
+                                value={c.verification_status}
+                                onChange={(e) => updateComponent(c, { verification_status: e.target.value })}
+                              >
+                                <option>Unverified</option>
+                                <option>Verified</option>
+                                <option>Rejected</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
+            {tab === "components" && (
+              <>
+                {components.length === 0 ? (
+                  <div className="text-sm text-steel">No components extracted yet.</div>
+                ) : (
+                  <table className="w-full mb-5">
+                    <thead className="border-b border-border">
+                      <tr>
+                        <th className="th !px-2">Part</th>
+                        <th className="th !px-2">Description</th>
+                        <th className="th !px-2 text-right">Qty</th>
+                        <th className="th !px-2">Make/Buy</th>
+                        <th className="th !px-2">Catalog</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {components.map((c) => {
+                        const cat = c.catalog_component_id ? catalogById[c.catalog_component_id] : null;
+                        return (
+                          <tr key={c.id}>
+                            <td className="td !px-2 font-medium whitespace-nowrap">{c.part_number || "—"}</td>
+                            <td className="td !px-2 text-steel">{c.description}</td>
+                            <td className="td !px-2 text-right">{c.quantity}</td>
+                            <td className="td !px-2"><MakeBuyBadge value={c.make_buy} /></td>
+                            <td className="td !px-2">
+                              {cat ? (
+                                <div className="flex items-center gap-1.5">
+                                  <CatalogMatchBadge catalogPartNumber={cat.part_number} />
+                                  <StockAvailabilityBadge status={catalogStatus(c)} />
+                                </div>
+                              ) : (
+                                <span className="text-xs text-steel-light">No match</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                {referenceBom && <ReferenceBomPanel reference={referenceBom} />}
+              </>
+            )}
+
+            {tab === "bom" && (
+              <>
+                {bomMsg && <div className="mb-3 text-sm text-emerald-700">{bomMsg}</div>}
+                {bom ? (
+                  <>
+                    <BomPanel bom={bom} tree={bomTree} onUpdate={updateBomLineItem} />
+                    <InventoryAvailabilityPanel bomId={bom.id} />
+                  </>
+                ) : (
+                  <div className="border border-dashed border-border rounded-industrial p-6 text-sm text-steel text-center">
+                    No BOM yet. Review the components, then click &quot;Generate BOM&quot;.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {activeAnalysis && (
+            <div className="border-t border-border p-4 flex items-center justify-between gap-3 bg-white">
+              <button className="btn-secondary flex-1" onClick={approve}>
                 <CheckCircle2 size={15} /> Approve Analysis
               </button>
-              <button className="btn-primary" disabled={busy} onClick={generateBom}>
+              <button
+                className="btn-accent flex-1"
+                disabled={busy}
+                onClick={async () => {
+                  await generateBom();
+                  setTab("bom");
+                }}
+              >
                 <FileSpreadsheet size={15} /> Generate BOM
               </button>
             </div>
-            {bomMsg && <div className="mt-3 text-sm text-emerald-700">{bomMsg}</div>}
-
-            {bom && (
-              <div className="mt-4">
-                <BomPanel bom={bom} tree={bomTree} onUpdate={updateBomLineItem} />
-                <InventoryAvailabilityPanel bomId={bom.id} />
-              </div>
-            )}
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
