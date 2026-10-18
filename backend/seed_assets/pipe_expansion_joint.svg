@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+    <rect width="1000" height="700" fill="#fafafa"/>
+    <rect x="10" y="10" width="980" height="680" fill="none" stroke="#333" stroke-width="2"/>
+    
+    <line x1="40" y1="330" x2="960" y2="330" stroke="#777" stroke-width="0.8" stroke-dasharray="14 4 3 4"/>
+    <rect x="60" y="290" width="150" height="80" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="790" y="290" width="150" height="80" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="210" y="230" width="22" height="200" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="768" y="230" width="22" height="200" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <polyline points="232,280 254.3,250 276.7,280 299.0,250 321.3,280 343.7,250 366.0,280 388.3,250 410.7,280 433.0,250 455.3,280 477.7,250 500.0,280 522.3,250 544.7,280 567.0,250 589.3,280 611.7,250 634.0,280 656.3,250 678.7,280 701.0,250 723.3,280 745.7,250 768.0,280" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <polyline points="232,380.0 254.3,410.0 276.7,380.0 299.0,410.0 321.3,380.0 343.7,410.0 366.0,380.0 388.3,410.0 410.7,380.0 433.0,410.0 455.3,380.0 477.7,410.0 500.0,380.0 522.3,410.0 544.7,380.0 567.0,410.0 589.3,380.0 611.7,410.0 634.0,380.0 656.3,410.0 678.7,380.0 701.0,410.0 723.3,380.0 745.7,410.0 768.0,380.0" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <line x1="190" y1="215" x2="810" y2="215" stroke="#1a1a1a" stroke-width="2.5"/>
+    <line x1="190" y1="445" x2="810" y2="445" stroke="#1a1a1a" stroke-width="2.5"/>
+    <rect x="182" y="206" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="182" y="436" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="236" y="206" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="236" y="436" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="750" y="206" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="750" y="436" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="804" y="206" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/><rect x="804" y="436" width="14" height="18" fill="white" stroke="#1a1a1a" stroke-width="1.5"/>
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="60" y1="175" x2="940" y2="175"/>
+      <line x1="60" y1="170" x2="60" y2="180"/>
+      <line x1="940" y1="170" x2="940" y2="180"/>
+      <text x="488.0" y="169">880.0 OAL</text>
+    </g>
+    
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="232" y1="485" x2="768" y2="485"/>
+      <line x1="232" y1="480" x2="232" y2="490"/>
+      <line x1="768" y1="480" x2="768" y2="490"/>
+      <text x="488.0" y="479">536.0 LIVE LENGTH</text>
+    </g>
+    
+    <g font-family="Consolas, monospace" font-size="10" fill="#222" stroke="#333">
+<rect x="40" y="520" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="533" stroke="none" font-weight="bold">ITEM</text>
+<rect x="80" y="520" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="533" stroke="none" font-weight="bold">PART NO</text>
+<rect x="210" y="520" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="533" stroke="none" font-weight="bold">DESCRIPTION</text>
+<rect x="400" y="520" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="533" stroke="none" font-weight="bold">QTY</text>
+<rect x="40" y="538" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="551" stroke="none">1</text>
+<rect x="80" y="538" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="551" stroke="none">PL-4001-01</text>
+<rect x="210" y="538" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="551" stroke="none">Bellows Pack SS316L</text>
+<rect x="400" y="538" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="551" stroke="none">1</text>
+<rect x="40" y="556" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="569" stroke="none">2</text>
+<rect x="80" y="556" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="569" stroke="none">PL-4001-02</text>
+<rect x="210" y="556" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="569" stroke="none">Pipe End NB200</text>
+<rect x="400" y="556" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="569" stroke="none">2</text>
+<rect x="40" y="574" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="587" stroke="none">3</text>
+<rect x="80" y="574" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="587" stroke="none">TIE-ROD-M16</text>
+<rect x="210" y="574" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="587" stroke="none">Tie Rod M16</text>
+<rect x="400" y="574" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="587" stroke="none">2</text>
+<rect x="40" y="592" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="605" stroke="none">4</text>
+<rect x="80" y="592" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="605" stroke="none">HEX-NUT-M16</text>
+<rect x="210" y="592" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="605" stroke="none">Hex Nut M16</text>
+<rect x="400" y="592" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="605" stroke="none">8</text>
+</g>
+    
+    
+    <g font-family="Consolas, monospace" font-size="10" stroke="#333" fill="#222">
+      <rect x="740" y="600" width="250" height="90" fill="white" stroke="#333" stroke-width="1.2"/>
+      <line x1="740" y1="625" x2="990" y2="625" stroke="#333"/>
+      <line x1="740" y1="650" x2="990" y2="650" stroke="#333"/>
+      <line x1="890" y1="650" x2="890" y2="690" stroke="#333"/>
+      <text x="748" y="617" font-weight="bold">PIPE EXPANSION JOINT</text>
+      <text x="748" y="640">DWG NO: PL-4001</text>
+      <text x="748" y="665">REV: B</text>
+      <text x="898" y="665">SCALE: 1:5</text>
+      <text x="748" y="685">UNITS: mm   MATERIAL: SEE BOM</text>
+    </g>
+    
+    </svg>

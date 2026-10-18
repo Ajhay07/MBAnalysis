@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+    <rect width="1000" height="700" fill="#fafafa"/>
+    <rect x="10" y="10" width="980" height="680" fill="none" stroke="#333" stroke-width="2"/>
+    
+    <line x1="120" y1="330" x2="800" y2="330" stroke="#777" stroke-width="0.8" stroke-dasharray="14 4 3 4"/>
+    <rect x="170" y="200" width="24" height="260" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="746" y="200" width="24" height="260" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="194" y="255" width="50" height="150" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="696" y="255" width="50" height="150" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <polyline points="244,255 266.6,215 289.2,255 311.8,215 334.4,255 357.0,215 379.6,255 402.2,215 424.8,255 447.4,215 470.0,255 492.6,215 515.2,255 537.8,215 560.4,255 583.0,215 605.6,255 628.2,215 650.8,255 673.4,215 696.0,255" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <polyline points="244,405.0 266.6,445.0 289.2,405.0 311.8,445.0 334.4,405.0 357.0,445.0 379.6,405.0 402.2,445.0 424.8,405.0 447.4,445.0 470.0,405.0 492.6,445.0 515.2,405.0 537.8,445.0 560.4,405.0 583.0,445.0 605.6,405.0 628.2,445.0 650.8,405.0 673.4,445.0 696.0,405.0" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <line x1="194" y1="290" x2="746" y2="290" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="6 4"/>
+    <line x1="194" y1="370" x2="746" y2="370" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="6 4"/>
+    <circle cx="880" cy="230" r="90" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="880" cy="230" r="55" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="880" cy="230" r="72" fill="none" stroke="#777" stroke-width="0.6" stroke-dasharray="8 4"/>
+    <circle cx="952.0" cy="230.0" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="930.9" cy="280.9" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="880.0" cy="302.0" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="829.1" cy="280.9" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="808.0" cy="230.0" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="829.1" cy="179.1" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="880.0" cy="158.0" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/><circle cx="930.9" cy="179.1" r="6" fill="none" stroke="#1a1a1a" stroke-width="1.2"/>
+    <text x="842" y="345" font-family="Consolas, monospace" font-size="10" fill="#333">END VIEW</text>
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="170" y1="170" x2="770" y2="170"/>
+      <line x1="170" y1="165" x2="170" y2="175"/>
+      <line x1="770" y1="165" x2="770" y2="175"/>
+      <text x="458.0" y="164">600.0 OAL</text>
+    </g>
+    
+    
+    <g stroke="#555" stroke-width="0.6" font-family="Consolas, monospace" font-size="9" fill="#333">
+      <line x1="130" y1="200" x2="130" y2="460"/>
+      <line x1="130" y1="195" x2="130" y2="205"/>
+      <line x1="130" y1="455" x2="130" y2="465"/>
+      <text x="118.0" y="194">DIA 260.0</text>
+    </g>
+    
+    <g font-family="Consolas, monospace" font-size="10" fill="#222" stroke="#333">
+<rect x="40" y="500" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="513" stroke="none" font-weight="bold">ITEM</text>
+<rect x="80" y="500" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="513" stroke="none" font-weight="bold">PART NO</text>
+<rect x="210" y="500" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="513" stroke="none" font-weight="bold">DESCRIPTION</text>
+<rect x="400" y="500" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="513" stroke="none" font-weight="bold">QTY</text>
+<rect x="40" y="518" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="531" stroke="none">1</text>
+<rect x="80" y="518" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="531" stroke="none">BLW-1005-01</text>
+<rect x="210" y="518" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="531" stroke="none">Bellows Element SS321</text>
+<rect x="400" y="518" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="531" stroke="none">1</text>
+<rect x="40" y="536" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="549" stroke="none">2</text>
+<rect x="80" y="536" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="549" stroke="none">FLG-1005-02</text>
+<rect x="210" y="536" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="549" stroke="none">Flange ASME 150#</text>
+<rect x="400" y="536" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="549" stroke="none">2</text>
+<rect x="40" y="554" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="567" stroke="none">3</text>
+<rect x="80" y="554" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="567" stroke="none">LNR-1005-03</text>
+<rect x="210" y="554" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="567" stroke="none">Internal Liner</text>
+<rect x="400" y="554" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="567" stroke="none">1</text>
+<rect x="40" y="572" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="585" stroke="none">4</text>
+<rect x="80" y="572" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="585" stroke="none">TIE-ROD-M16</text>
+<rect x="210" y="572" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="585" stroke="none">Tie Rod M16</text>
+<rect x="400" y="572" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="585" stroke="none">4</text>
+<rect x="40" y="590" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="44" y="603" stroke="none">5</text>
+<rect x="80" y="590" width="130" height="18" fill="white" stroke-width="0.8"/>
+<text x="84" y="603" stroke="none">HEX-NUT-M16</text>
+<rect x="210" y="590" width="190" height="18" fill="white" stroke-width="0.8"/>
+<text x="214" y="603" stroke="none">Hex Nut M16</text>
+<rect x="400" y="590" width="40" height="18" fill="white" stroke-width="0.8"/>
+<text x="404" y="603" stroke="none">8</text>
+</g>
+    
+    
+    <g font-family="Consolas, monospace" font-size="10" stroke="#333" fill="#222">
+      <rect x="740" y="600" width="250" height="90" fill="white" stroke="#333" stroke-width="1.2"/>
+      <line x1="740" y1="625" x2="990" y2="625" stroke="#333"/>
+      <line x1="740" y1="650" x2="990" y2="650" stroke="#333"/>
+      <line x1="890" y1="650" x2="890" y2="690" stroke="#333"/>
+      <text x="748" y="617" font-weight="bold">BELLOWS ASSEMBLY</text>
+      <text x="748" y="640">DWG NO: EX-1005</text>
+      <text x="748" y="665">REV: A</text>
+      <text x="898" y="665">SCALE: 1:4</text>
+      <text x="748" y="685">UNITS: mm   MATERIAL: SEE BOM</text>
+    </g>
+    
+    </svg>

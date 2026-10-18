@@ -22,7 +22,7 @@ def test_demo_provider_output_does_not_contain_seeded_project_identifiers(db):
 def test_seeded_demo_drawings_are_flagged_is_demo(db):
     seed_demo_data(db)
     demo_drawings = db.query(Drawing).filter(Drawing.is_demo == True).all()  # noqa: E712
-    assert len(demo_drawings) == 3
+    assert len(demo_drawings) == len(PROJECTS)
     for d in demo_drawings:
         assert d.is_demo is True
         assert "[DEMO]" in d.title

@@ -33,6 +33,10 @@ DEMO_CATALOG = [
          unit_price=0.18, currency="USD", stock_quantity=500),
     dict(part_number="SH-2002-05", description="[DEMO] Retaining Ring", category="Fastener",
          unit_price=0.65, currency="USD", stock_quantity=0),  # -> Out of Stock
+    dict(part_number="TIE-ROD-M16", description="[DEMO] Tie Rod M16", category="Fastener",
+         unit_price=2.40, currency="USD", stock_quantity=12),
+    dict(part_number="HEX-NUT-M16", description="[DEMO] Hex Nut M16", category="Fastener",
+         unit_price=0.22, currency="USD", stock_quantity=4),  # below the seeded qty=8 -> Low Stock
 ]
 
 # Demo inventory lots, deliberately tied to the seeded gearbox/shaft/bracket BOM line items
@@ -125,6 +129,42 @@ PROJECTS = [
                  verification_status="Verified"),
         ],
     },
+    {
+        "drawing_number": "EX-1005",
+        "title": "[DEMO] Bellows Assembly",
+        "revision": "A",
+        "scale": "1:4",
+        "asset": "bellows_assembly.svg",
+        "status": DrawingStatus.NEEDS_REVIEW,
+        "with_bom": False,
+        "components": [
+            dict(part_number="BLW-1005-01", description="[DEMO] Bellows Element, 10 convolutions", category="Bellows",
+                 quantity=1, material="Stainless Steel 321", grade="ASTM A240", make_buy=MakeBuy.MAKE,
+                 confidence=0.82, verification_status="Unverified",
+                 dimensions={"length_mm": 452, "od_mm": 230, "convolutions": 10}),
+            dict(part_number="FLG-1005-02", description="[DEMO] Flange ASME B16.5 150#", category="Flange",
+                 quantity=2, material="Carbon Steel", grade="A105", make_buy=MakeBuy.MAKE,
+                 confidence=0.74, verification_status="Unverified", dimensions={"od_mm": 260}),
+            dict(part_number="LNR-1005-03", description="[DEMO] Internal Liner", category="Liner",
+                 quantity=1, material="Stainless Steel 304", grade="", make_buy=MakeBuy.REVIEW,
+                 confidence=0.48, verification_status="Unverified"),
+            dict(part_number="TIE-ROD-M16", description="[DEMO] Tie Rod M16", category="Fastener",
+                 quantity=4, material="Alloy Steel", grade="B7", make_buy=MakeBuy.BUY,
+                 confidence=0.91, verification_status="Unverified"),
+            dict(part_number="HEX-NUT-M16", description="[DEMO] Hex Nut M16", category="Fastener",
+                 quantity=8, material="", grade="2H", make_buy=MakeBuy.BUY,
+                 confidence=0.93, verification_status="Unverified"),
+        ],
+    },
+    {
+        "drawing_number": "PL-4001",
+        "title": "[DEMO] Pipe Expansion Joint",
+        "revision": "B",
+        "scale": "1:5",
+        "asset": "pipe_expansion_joint.svg",
+        "status": DrawingStatus.UPLOADED,
+        "components": [],
+    },
 ]
 
 
@@ -140,10 +180,11 @@ def seed_demo_data(db, actor: str = "system") -> int:
                          email=None, phone=None, notes="Demo supplier - no real account"))
         db.commit()
 
-    if db.query(CatalogComponent).count() == 0:
-        for row in DEMO_CATALOG:
+    existing_parts = {c.part_number for c in db.query(CatalogComponent).all()}
+    for row in DEMO_CATALOG:
+        if row["part_number"] not in existing_parts:
             db.add(CatalogComponent(**row))
-        db.commit()
+    db.commit()
     catalog = db.query(CatalogComponent).all()
 
     created = 0
@@ -163,57 +204,60 @@ def seed_demo_data(db, actor: str = "system") -> int:
         drawing = Drawing(
             drawing_number=proj["drawing_number"], title=proj["title"], revision=proj["revision"],
             file_name=proj["asset"], stored_file_name=stored_name, file_type="svg", file_size=size,
-            units="mm", scale="1:2", status=DrawingStatus.REVIEWED, is_demo=True,
+            units="mm", scale=proj.get("scale", "1:2"), status=proj.get("status", DrawingStatus.REVIEWED),
+            is_demo=True,
         )
         db.add(drawing)
         db.flush()
 
-        analysis = Analysis(
-            drawing_id=drawing.id, version=1, provider="demo-seed",
-            title_block={"drawing_number": proj["drawing_number"], "title": proj["title"],
-                         "revision": proj["revision"], "units": "mm", "scale": "1:2",
-                         "material_spec": "See BOM"},
-            dimensions=[], materials=sorted({c["material"] for c in proj["components"] if c["material"]}),
-            raw_ocr_text="[DEMO] seeded analysis - not derived from OCR",
-            overall_confidence=sum(c["confidence"] for c in proj["components"]) / len(proj["components"]),
-        )
-        db.add(analysis)
-        db.flush()
+        if proj["components"]:
+            analysis = Analysis(
+                drawing_id=drawing.id, version=1, provider="demo-seed",
+                title_block={"drawing_number": proj["drawing_number"], "title": proj["title"],
+                             "revision": proj["revision"], "units": "mm", "scale": proj.get("scale", "1:2"),
+                             "material_spec": "See BOM"},
+                dimensions=[], materials=sorted({c["material"] for c in proj["components"] if c["material"]}),
+                raw_ocr_text="[DEMO] seeded analysis - not derived from OCR",
+                overall_confidence=sum(c["confidence"] for c in proj["components"]) / len(proj["components"]),
+            )
+            db.add(analysis)
+            db.flush()
 
-        for c in proj["components"]:
-            matched, score = match_catalog_component(c["part_number"], c["description"], catalog)
-            db.add(Component(
-                analysis_id=analysis.id, part_number=c["part_number"], description=c["description"],
-                category=c["category"], quantity=c["quantity"], material=c["material"],
-                grade=c["grade"], dimensions=c.get("dimensions", {}), tolerances={},
-                gear_specs=c.get("gear_specs", {}), make_buy=c["make_buy"],
-                confidence=c["confidence"], verification_status=c["verification_status"],
-                source_page=1, source_region={}, source_text="[DEMO] seeded, no source drawing text",
-                catalog_component_id=matched.id if matched else None,
-                catalog_match_score=score if matched else None,
-            ))
-        db.flush()
+            for c in proj["components"]:
+                matched, score = match_catalog_component(c["part_number"], c["description"], catalog)
+                db.add(Component(
+                    analysis_id=analysis.id, part_number=c["part_number"], description=c["description"],
+                    category=c["category"], quantity=c["quantity"], material=c["material"],
+                    grade=c["grade"], dimensions=c.get("dimensions", {}), tolerances={},
+                    gear_specs=c.get("gear_specs", {}), make_buy=c["make_buy"],
+                    confidence=c["confidence"], verification_status=c["verification_status"],
+                    source_page=1, source_region={}, source_text="[DEMO] seeded, no source drawing text",
+                    catalog_component_id=matched.id if matched else None,
+                    catalog_match_score=score if matched else None,
+                ))
+            db.flush()
 
-        bom = Bom(drawing_id=drawing.id, analysis_id=analysis.id, version=1, status="Draft")
-        db.add(bom)
-        db.flush()
-        for comp in db.query(Component).filter(Component.analysis_id == analysis.id).all():
-            catalog_item = next((c for c in catalog if c.id == comp.catalog_component_id), None)
-            db.add(BomLineItem(
-                bom_id=bom.id, component_id=comp.id, part_number=comp.part_number,
-                description=comp.description, category=comp.category, quantity=comp.quantity,
-                material=comp.material, make_buy=comp.make_buy,
-                catalog_component_id=comp.catalog_component_id,
-                unit_cost=catalog_item.unit_price if catalog_item else None,
-            ))
-        db.flush()
-        # These seeded BOMs are flat (no parent_line_item_id), but recompute_rollup still needs
-        # to run so each line's total_quantity (qty-per-assembly rolled up) is populated rather
-        # than left null - inventory availability treats a null total_quantity as "rollup
-        # undetermined" (REVIEW_REQUIRED), which would otherwise make every seeded line review-
-        # required regardless of actual stock.
-        from app.services.bom_service import recompute_rollup
-        recompute_rollup(db, bom.id)
+            if proj.get("with_bom", True):
+                bom = Bom(drawing_id=drawing.id, analysis_id=analysis.id, version=1, status="Draft")
+                db.add(bom)
+                db.flush()
+                for comp in db.query(Component).filter(Component.analysis_id == analysis.id).all():
+                    catalog_item = next((c for c in catalog if c.id == comp.catalog_component_id), None)
+                    db.add(BomLineItem(
+                        bom_id=bom.id, component_id=comp.id, part_number=comp.part_number,
+                        description=comp.description, category=comp.category, quantity=comp.quantity,
+                        material=comp.material, make_buy=comp.make_buy,
+                        catalog_component_id=comp.catalog_component_id,
+                        unit_cost=catalog_item.unit_price if catalog_item else None,
+                    ))
+                db.flush()
+                # These seeded BOMs are flat (no parent_line_item_id), but recompute_rollup still needs
+                # to run so each line's total_quantity (qty-per-assembly rolled up) is populated rather
+                # than left null - inventory availability treats a null total_quantity as "rollup
+                # undetermined" (REVIEW_REQUIRED), which would otherwise make every seeded line review-
+                # required regardless of actual stock.
+                from app.services.bom_service import recompute_rollup
+                recompute_rollup(db, bom.id)
 
         db.add(AuditLog(entity_type="drawing", entity_id=drawing.id, action="demo_seeded", details={},
                          actor=actor))
