@@ -8,7 +8,8 @@ import { StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogM
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
 import ReferenceBomPanel from "@/components/ReferenceBomPanel";
-import PageHeader from "@/components/PageHeader";
+import PageLayout, { AsideSection, AsideItem } from "@/components/PageLayout";
+import { FileText } from "lucide-react";
 
 function OcrOverlay({
   evidence,
@@ -73,6 +74,7 @@ export default function DrawingViewerPage() {
   const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
   const [referenceBom, setReferenceBom] = useState<ReferenceBomResponse | null>(null);
   const [catalogById, setCatalogById] = useState<Record<string, any>>({});
+  const [allDrawings, setAllDrawings] = useState<Drawing[]>([]);
   const [tab, setTab] = useState<"info" | "components" | "bom">("info");
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -105,6 +107,7 @@ export default function DrawingViewerPage() {
     setJobs(await api.listDrawingJobs(id));
     const catalog = await api.listCatalog();
     setCatalogById(Object.fromEntries(catalog.map((c: any) => [c.id, c])));
+    setAllDrawings(await api.listDrawings());
   }, [id]);
 
   async function reprocess() {
@@ -233,27 +236,42 @@ export default function DrawingViewerPage() {
         ["scale", drawing.scale || "n/a"],
       ];
 
+  const aside = (
+    <>
+      <AsideSection title="Drawings">
+        <div className="space-y-1">
+          {allDrawings.map((d) => (
+            <AsideItem key={d.id} icon={FileText} label={d.drawing_number} count={`Rev ${d.revision}`}
+              active={d.id === drawing.id} href={`/drawings/${d.id}`} />
+          ))}
+        </div>
+      </AsideSection>
+      <div className="mx-3 border-t border-border" />
+      <AsideSection title="This Drawing">
+        <dl className="px-3 grid grid-cols-[96px_1fr] gap-y-2 text-[14px]">
+          <dt className="text-steel">Status</dt><dd><StatusBadge status={drawing.status} /></dd>
+          <dt className="text-steel">Revision</dt><dd className="text-graphite">{drawing.revision}</dd>
+          <dt className="text-steel">Scale</dt><dd className="text-graphite">{drawing.scale || "n/a"}</dd>
+          <dt className="text-steel">Units</dt><dd className="text-graphite">{drawing.units}</dd>
+          <dt className="text-steel">File</dt><dd className="text-graphite truncate" title={drawing.file_name}>{drawing.file_name}</dd>
+          <dt className="text-steel">Components</dt><dd className="text-graphite">{components.length}</dd>
+          <dt className="text-steel">BOM</dt><dd className="text-graphite">{bom ? `v${bom.version} · ${bom.status}` : "Not generated"}</dd>
+        </dl>
+      </AsideSection>
+    </>
+  );
+
   return (
-    <div className="px-8 pb-6">
-      <PageHeader
-        breadcrumb={[{ label: "Drawing Library", href: "/drawings" }, { label: drawing.drawing_number }]}
-        title={`${drawing.drawing_number}${drawing.title ? ` - ${drawing.title}` : ""}`}
-        actions={
-          drawing.status === "Failed" ? (
-            <button className="btn-secondary" disabled={busy} onClick={reprocess}>
-              <RotateCw size={17} /> Retry Analysis
-            </button>
-          ) : (
-            <button className="btn-secondary" disabled={busy} onClick={runAnalysis}>
-              <RotateCw size={17} /> {analyses.length ? "Re-run Analysis" : "Run Analysis"}
-            </button>
-          )
-        }
-      >
-        <div className="flex items-center gap-2 mt-3">
+    <PageLayout
+      aside={aside}
+      breadcrumb={[{ label: "Drawing Library", href: "/drawings" }, { label: drawing.drawing_number }]}
+      title={drawing.drawing_number}
+      subtitle={drawing.title}
+      heroExtra={
+        <div className="flex items-center gap-2 mt-2.5">
           <StatusBadge status={drawing.status} />
           {drawing.is_demo && (
-            <span className="inline-flex items-center px-4 py-1.5 rounded-md text-[15px] font-medium bg-accent-light text-accent-dark">
+            <span className="inline-flex items-center px-3 py-1 rounded-md text-[14px] font-medium bg-accent-light text-accent-dark">
               DEMO DATA
             </span>
           )}
@@ -266,10 +284,18 @@ export default function DrawingViewerPage() {
               processing details{drawing.job_retry_count ? ` (retry ${drawing.job_retry_count})` : ""}
             </button>
           )}
+          <button
+            className="btn-secondary !py-1.5 !px-3.5 !text-sm ml-2"
+            disabled={busy}
+            onClick={drawing.status === "Failed" ? reprocess : runAnalysis}
+          >
+            <RotateCw size={15} /> {drawing.status === "Failed" ? "Retry Analysis" : analyses.length ? "Re-run Analysis" : "Run Analysis"}
+          </button>
         </div>
-      </PageHeader>
+      }
+    >
 
-      <div className="flex gap-5 h-[calc(100vh-250px)] min-h-[560px]">
+      <div className="flex gap-5 h-[calc(100vh-345px)] min-h-[520px]">
         {/* Left: drawing viewer */}
         <div ref={viewerRef} className="flex-[1.25] min-w-0 card flex flex-col overflow-hidden bg-white">
           <div className="h-12 border-b border-border flex items-center justify-between px-3">
@@ -620,6 +646,6 @@ export default function DrawingViewerPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

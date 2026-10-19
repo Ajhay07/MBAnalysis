@@ -7,7 +7,7 @@
 }
 
 body {
-  background-color: #f3f5f8;
+  background-color: #f4f6f9;
   color: #0f1b2d;
 }
 
@@ -36,11 +36,11 @@ body {
 }
 
 .page-title {
-  @apply text-[36px] leading-[1.15] font-extrabold text-graphite tracking-tight;
+  @apply text-[48px] leading-[1.1] font-extrabold text-navy tracking-[-0.02em];
 }
 
 .page-subtitle {
-  @apply text-[17px] text-steel mt-2;
+  @apply text-[20px] text-graphite/70 mt-2;
 }
 
 .th {
@@ -61,4 +61,17 @@ body {
 
 .input {
   @apply w-full border border-border rounded-industrial px-3.5 py-2.5 text-[15px] bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand;
+}
+
+.section-title {
+  @apply flex items-center gap-3 text-[20px] font-bold text-graphite;
+}
+
+.section-title::before {
+  content: "";
+  @apply block w-1 h-7 rounded-sm bg-brand shrink-0;
+}
+
+.btn-cta {
+  @apply inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-dark text-white text-base font-semibold px-6 py-3 rounded-industrial shadow-[0_6px_16px_-6px_rgba(246,121,31,0.7)] transition-colors disabled:opacity-60;
 }

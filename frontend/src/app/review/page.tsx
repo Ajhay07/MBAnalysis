@@ -5,7 +5,9 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import DrawingThumb from "@/components/DrawingThumb";
 import { describeActivity, formatDateTime } from "@/lib/format";
-import PageHeader from "@/components/PageHeader";
+import PageLayout, { AsideSection, AsideItem, AsideSelect, ClearFiltersButton } from "@/components/PageLayout";
+import { AlertTriangle, ClipboardList, CheckCircle2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 type ReviewRow = Awaited<ReturnType<typeof api.reviewComponents>>[number];
 type TabKey = "low" | "needs" | "approved";
@@ -15,6 +17,8 @@ const TABS: { key: TabKey; label: string; filter: (r: ReviewRow) => boolean }[] 
   { key: "needs", label: "Needs Review", filter: (r) => r.verification_status === "Unverified" },
   { key: "approved", label: "Approved", filter: (r) => r.verification_status === "Verified" },
 ];
+
+const TAB_ICONS: Record<TabKey, LucideIcon> = { low: AlertTriangle, needs: ClipboardList, approved: CheckCircle2 };
 
 const ACTION_STYLES: Record<string, string> = {
   Make: "bg-accent text-white border-accent",
@@ -34,6 +38,8 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>("low");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [drawingFilter, setDrawingFilter] = useState("");
+  const [mbFilter, setMbFilter] = useState("");
 
   async function load() {
     const [r, a] = await Promise.all([api.reviewComponents(), api.auditTrail()]);
@@ -59,15 +65,46 @@ export default function ReviewPage() {
   }
 
   const active = TABS.find((t) => t.key === tab)!;
-  const visible = rows.filter(active.filter);
+  const visible = rows.filter(
+    (r) => active.filter(r) && (!drawingFilter || r.drawing_id === drawingFilter) && (!mbFilter || r.make_buy === mbFilter),
+  );
+  const drawingOptions = Array.from(new Map(rows.map((r) => [r.drawing_id, r.drawing_number])).entries()).sort((a, b) =>
+    a[1].localeCompare(b[1]),
+  );
+
+  const aside = (
+    <>
+      <AsideSection title="Review Queues">
+        <div className="space-y-1">
+          {TABS.map((t) => (
+            <AsideItem
+              key={t.key}
+              icon={TAB_ICONS[t.key]}
+              label={t.label}
+              count={rows.filter(t.filter).length}
+              active={tab === t.key}
+              onClick={() => setTab(t.key)}
+            />
+          ))}
+        </div>
+      </AsideSection>
+      <div className="mx-3 border-t border-border" />
+      <AsideSection title="Filters">
+        <AsideSelect label="Drawing" value={drawingFilter} onChange={setDrawingFilter}
+          options={[["", "All drawings"], ...drawingOptions]} />
+        <AsideSelect label="Make / Buy" value={mbFilter} onChange={setMbFilter}
+          options={[["", "All decisions"], ["Make", "Make"], ["Buy", "Buy"], ["Review", "Review"]]} />
+        <ClearFiltersButton onClick={() => { setDrawingFilter(""); setMbFilter(""); }} />
+      </AsideSection>
+    </>
+  );
 
   return (
-    <div className="px-8 pb-10">
-      <PageHeader
-        breadcrumb={[{ label: "Drawing Library", href: "/drawings" }, { label: "Review" }]}
-        title="Review & Approval Center"
-        subtitle="Review AI-extracted components and resolve low-confidence items."
-      />
+    <PageLayout
+      aside={aside}
+      title="Review & Approval Center"
+      subtitle="Review AI-extracted components and resolve low-confidence items."
+    >
 
       <div className="card mb-5">
         <div className="flex border-b border-border px-2">
@@ -137,7 +174,7 @@ export default function ReviewPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-lg font-bold px-5 pt-5 pb-3">Audit Trail</h2>
+        <h2 className="section-title px-5 pt-5 pb-3">Audit Trail</h2>
         <table className="w-full">
           <thead className="border-y border-border bg-surface/60">
             <tr>
@@ -161,6 +198,6 @@ export default function ReviewPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </PageLayout>
   );
 }

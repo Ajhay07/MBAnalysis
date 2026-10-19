@@ -15,7 +15,7 @@ export function BrandLogo({ dark = true }: { dark?: boolean }) {
           MB
         </span>
       </div>
-      <div className={`text-[16px] font-bold leading-[1.2] tracking-wide ${dark ? "text-white" : "text-graphite"}`}>
+      <div className={`text-[17px] font-extrabold leading-[1.15] tracking-wide ${dark ? "text-white" : "text-graphite"}`}>
         METALLIC
         <br />
         BELLOWS

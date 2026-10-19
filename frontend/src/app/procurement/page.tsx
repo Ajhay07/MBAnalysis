@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText } from "lucide-react";
 import { api, Drawing } from "@/lib/api";
 import { CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
-import PageHeader from "@/components/PageHeader";
+import PageLayout, { AsideSection, AsideItem } from "@/components/PageLayout";
 
 function specText(dimensions: any, tolerances: any): string {
   const parts: string[] = [];
@@ -30,7 +30,7 @@ function KpiCard({ icon, label, value, note }: {
 }) {
   return (
     <div className="card px-5 py-4 flex items-center gap-4">
-      <div className="text-accent shrink-0">{icon}</div>
+      <div className="text-brand shrink-0">{icon}</div>
       <div className="min-w-0">
         <div className="text-sm text-steel">{label}</div>
         <div className="text-[28px] font-bold text-graphite leading-tight">{value}</div>
@@ -133,22 +133,41 @@ export default function ProcurementPage() {
     </table>
   );
 
+  const selectedDrawing = drawings.find((d) => d.id === selected);
+
+  const aside = (
+    <>
+      <AsideSection title="Drawings">
+        <div className="space-y-1">
+          {drawings.map((d) => (
+            <AsideItem
+              key={d.id}
+              icon={FileText}
+              label={d.drawing_number}
+              count={d.revision ? `Rev ${d.revision}` : undefined}
+              active={d.id === selected}
+              onClick={() => setSelected(d.id)}
+            />
+          ))}
+        </div>
+      </AsideSection>
+      <div className="mx-3 border-t border-border" />
+      <AsideSection title="Requirements">
+        <div className="space-y-1">
+          <AsideItem icon={ShoppingCart} label="Items to Buy" count={buy.length} active={tab === "buy"} onClick={() => setTab("buy")} />
+          <AsideItem icon={Settings} label="Make In-House" count={make.length} active={tab === "make"} onClick={() => setTab("make")} />
+          <AsideItem icon={Eye} label="Needs Review" count={review.length} active={tab === "review"} onClick={() => setTab("review")} />
+        </div>
+      </AsideSection>
+    </>
+  );
+
   return (
-    <div className="px-8 pb-10">
-      <PageHeader
-        breadcrumb={[{ label: "Procurement" }]}
-        title="Procurement / Purchase Requirements"
-        subtitle="Manage items to buy, make in-house, or review."
-        actions={
-          <select className="input !w-80 !h-12" value={selected} onChange={(e) => setSelected(e.target.value)}>
-            {drawings.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.drawing_number} - {d.title}
-              </option>
-            ))}
-          </select>
-        }
-      />
+    <PageLayout
+      aside={aside}
+      title="Procurement / Purchase Requirements"
+      subtitle={selectedDrawing ? `${selectedDrawing.drawing_number} · ${selectedDrawing.title}` : "Manage items to buy, make in-house, or review."}
+    >
 
       {summary && (
         <div className="grid grid-cols-4 gap-4 mb-5">
@@ -266,14 +285,14 @@ export default function ProcurementPage() {
 
       {tab !== "make" && (
         <div className="card mb-5">
-          <h2 className="text-lg font-bold px-5 pt-5 pb-3">Items to Manufacture In-House ({make.length})</h2>
+          <h2 className="section-title px-5 pt-5 pb-3">Items to Manufacture In-House ({make.length})</h2>
           {makeTable}
         </div>
       )}
 
       <div className="card mb-5">
         <div className="px-5 pt-5 pb-3">
-          <h2 className="text-lg font-bold">Source Catalog ({catalogUsage.length})</h2>
+          <h2 className="section-title">Source Catalog ({catalogUsage.length})</h2>
           <p className="text-xs text-steel mt-0.5">
             Reference list of known parts — price, stock, and how many BOM lines the OCR/vision pipeline matched to each.
           </p>
@@ -328,7 +347,7 @@ export default function ProcurementPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-lg font-bold px-5 pt-5 pb-3">Suppliers ({suppliers.length})</h2>
+        <h2 className="section-title px-5 pt-5 pb-3">Suppliers ({suppliers.length})</h2>
         <ul className="divide-y divide-border border-t border-border">
           {suppliers.map((s) => (
             <li key={s.id} className="px-5 py-3">
@@ -339,6 +358,6 @@ export default function ProcurementPage() {
           {suppliers.length === 0 && <li className="px-5 py-3 text-steel text-sm">No suppliers yet.</li>}
         </ul>
       </div>
-    </div>
+    </PageLayout>
   );
 }

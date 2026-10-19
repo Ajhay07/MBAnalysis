@@ -6,15 +6,15 @@ export function DemoBadge() {
   return <span className="badge-demo">Demo Data</span>;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  Uploaded: "bg-[#e4e7ec] text-[#3b4452]",
-  Queued: "bg-brand-light text-brand-dark",
-  Processing: "bg-brand-light text-brand-dark",
-  NeedsReview: "bg-[#dbe8fb] text-[#1d5fc4]",
-  Reviewed: "bg-[#d6f3e3] text-[#14804a]",
-  BOMGenerated: "bg-brand-light text-brand-dark",
-  Failed: "bg-red-100 text-red-700",
-  Cancelled: "bg-gray-100 text-gray-600",
+const STATUS_STYLES: Record<string, [string, string]> = {
+  Uploaded: ["bg-[#eceef2] text-[#3b4452]", "bg-[#8a94a3]"],
+  Queued: ["bg-brand-light text-brand-dark", "bg-brand"],
+  Processing: ["bg-brand-light text-brand-dark", "bg-brand"],
+  NeedsReview: ["bg-[#e3edfb] text-[#1d5fc4]", "bg-[#1d64c8]"],
+  Reviewed: ["bg-[#e1f5ea] text-[#14804a]", "bg-[#1fa25c]"],
+  BOMGenerated: ["bg-brand-light text-brand-dark", "bg-brand"],
+  Failed: ["bg-red-100 text-red-700", "bg-red-600"],
+  Cancelled: ["bg-gray-100 text-gray-600", "bg-gray-400"],
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -23,9 +23,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
-  const cls = STATUS_STYLES[status] || "bg-gray-100 text-gray-600";
+  const [cls, dot] = STATUS_STYLES[status] || ["bg-gray-100 text-gray-600", "bg-gray-400"];
   return (
-    <span className={`inline-flex items-center px-4 py-1.5 rounded-md text-[15px] font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-[14px] font-medium whitespace-nowrap ${cls}`}>
+      <span className={`w-2.5 h-2.5 rounded-full ${dot}`} />
       {STATUS_LABELS[status] || status}
     </span>
   );

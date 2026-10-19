@@ -6,25 +6,25 @@ const config: Config = {
     extend: {
       colors: {
         surface: "#f3f5f8",
-        graphite: "#0f1b2d",
-        ink: "#0f1b2d",
+        graphite: "#13213a",
+        ink: "#0f2340",
         steel: "#5a6576",
         "steel-light": "#8a94a3",
         border: "#e3e8ef",
         navy: {
-          DEFAULT: "#11233a",
-          light: "#16294180",
-          line: "#1f3550",
+          DEFAULT: "#0f2340",
+          light: "#16305a",
+          line: "#24344c",
         },
         brand: {
-          DEFAULT: "#1668dc",
-          dark: "#1256b8",
-          light: "#e6effc",
+          DEFAULT: "#1d64c8",
+          dark: "#164f9f",
+          light: "#e8f0fb",
         },
         accent: {
-          DEFAULT: "#f26b1d",
-          dark: "#d9590f",
-          light: "#fde9dc",
+          DEFAULT: "#f26a1b",
+          dark: "#d9580c",
+          light: "#feecdf",
         },
       },
       borderRadius: {

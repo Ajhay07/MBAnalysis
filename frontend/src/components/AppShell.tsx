@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import { useAuth } from "@/lib/auth-context";
 
@@ -36,12 +35,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 min-w-0">
-        <TopBar />
-        {children}
-      </main>
+    <div className="min-h-screen">
+      <TopBar />
+      <main className="min-w-0">{children}</main>
     </div>
   );
 }

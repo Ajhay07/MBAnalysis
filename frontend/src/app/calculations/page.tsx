@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Cog, Settings2, Cylinder, Box, Weight, Package, Ruler, type LucideIcon } from "lucide-react";
 import { api } from "@/lib/api";
-import PageHeader from "@/components/PageHeader";
+import PageLayout, { AsideSection, AsideItem } from "@/components/PageLayout";
 
 type CalcKey = "gear-ratio" | "gear-module" | "cylindrical-volume" | "rectangular-volume" | "mass" | "raw-stock-volume" | "convert-length";
 type Field = { name: string; label: string; type?: string; default?: string };
@@ -124,36 +124,21 @@ export default function CalculationsPage() {
 
   const shown = main.result ? presentResult(active, main.result.result, main.values) : null;
 
+  const aside = (
+    <AsideSection title="Calculators">
+      <div className="space-y-1">
+        {FORMS.map((f) => (
+          <AsideItem key={f.key} icon={f.icon} label={f.label} active={active === f.key} onClick={() => select(f.key)} />
+        ))}
+      </div>
+    </AsideSection>
+  );
+
   return (
-    <div className="px-8 pb-10">
-      <PageHeader
-        breadcrumb={[{ label: "Engineering Tools" }]}
-        title="Engineering Calculation Engine"
-        subtitle="Quickly compute common engineering parameters."
-      />
-
-      <div className="grid grid-cols-[230px_1fr] gap-5 mb-6">
-        <div className="card p-2 h-fit">
-          {FORMS.map((f) => {
-            const Icon = f.icon;
-            const on = active === f.key;
-            return (
-              <button
-                key={f.key}
-                onClick={() => select(f.key)}
-                className={`w-full flex items-center gap-3 text-left text-[15px] px-3 py-3 rounded-industrial transition-colors ${
-                  on ? "bg-brand-light text-brand font-semibold" : "text-steel hover:bg-surface hover:text-graphite"
-                }`}
-              >
-                <Icon size={17} />
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
-
+    <PageLayout aside={aside} title="Engineering Calculation Engine" subtitle="Quickly compute common engineering parameters.">
+      <div className="mb-6">
         <div className="card p-6">
-          <h2 className="text-lg font-semibold mb-5">{form.label}</h2>
+          <h2 className="section-title mb-5">{form.label}</h2>
           <div className="grid grid-cols-[1fr_260px] gap-6">
             <div>
               <div className="grid grid-cols-2 gap-4 mb-5">
@@ -197,12 +182,12 @@ export default function CalculationsPage() {
         </div>
       </div>
 
-      <h2 className="text-lg font-bold mb-3">Other Calculations</h2>
+      <h2 className="section-title mb-3">Other Calculations</h2>
       <div className="grid grid-cols-2 gap-5">
         <QuickCalc def={byKey("cylindrical-volume")} calc={cyl} />
         <QuickCalc def={byKey("rectangular-volume")} calc={rect} />
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
