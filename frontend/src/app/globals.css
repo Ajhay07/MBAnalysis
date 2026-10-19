@@ -7,12 +7,12 @@
 }
 
 body {
-  background-color: #f4f6f9;
+  background-color: #e9edf2;
   color: #0f1b2d;
 }
 
 .card {
-  @apply bg-white border border-border rounded-industrial shadow-industrial;
+  @apply bg-white border border-[#d3dae3] rounded-industrial shadow-[0_1px_2px_rgba(15,35,64,0.06),0_4px_14px_-4px_rgba(15,35,64,0.12)];
 }
 
 .btn-primary {
@@ -44,7 +44,7 @@ body {
 }
 
 .th {
-  @apply text-left text-[12px] font-semibold uppercase tracking-wide text-graphite/80 px-4 py-3.5 bg-[#f6f7f9];
+  @apply text-left text-[12px] font-semibold uppercase tracking-wide text-graphite/80 px-4 py-3.5 bg-[#f1f4f8] border-b border-[#dfe5ec];
 }
 
 .td {

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText } from "lucide-react";
+import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText, ClipboardList, Database, Truck, PlusCircle } from "lucide-react";
 import { api, Drawing } from "@/lib/api";
 import { CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
-import PageLayout, { AsideSection, AsideItem } from "@/components/PageLayout";
+import PageLayout, { AsideSection, AsideItem, SectionCard } from "@/components/PageLayout";
 
 function specText(dimensions: any, tolerances: any): string {
   const parts: string[] = [];
@@ -96,7 +96,7 @@ export default function ProcurementPage() {
 
   const makeTable = (
     <table className="w-full">
-      <thead className="border-b border-border bg-surface/60">
+      <thead>
         <tr>
           <th className="th">Part Number</th>
           <th className="th">Description</th>
@@ -170,7 +170,7 @@ export default function ProcurementPage() {
     >
 
       {summary && (
-        <div className="grid grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-4 gap-4 mb-7">
           <KpiCard icon={<ShoppingCart size={30} strokeWidth={1.75} />} label="Buy items" value={summary.buy_item_count} />
           <KpiCard icon={<Settings size={30} strokeWidth={1.75} />} label="Make items" value={summary.make_item_count} />
           <KpiCard icon={<Eye size={30} strokeWidth={1.75} />} label="Review items" value={summary.review_item_count} />
@@ -185,8 +185,13 @@ export default function ProcurementPage() {
         </div>
       )}
 
-      <div className="card mb-5">
-        <div className="flex border-b border-border px-2">
+      <SectionCard
+        tone="blue"
+        icon={ClipboardList}
+        title="Purchase Requirements"
+        description="Lines from this drawing's latest BOM, split by Make / Buy decision."
+      >
+        <div className="flex border-b border-border px-2 bg-white">
           <button className={`tab ${tab === "buy" ? "tab-active" : ""}`} onClick={() => setTab("buy")}>
             Items to Buy ({buy.length})
           </button>
@@ -200,7 +205,7 @@ export default function ProcurementPage() {
 
         {tab === "buy" && (
           <table className="w-full">
-            <thead className="border-b border-border bg-surface/60">
+            <thead>
               <tr>
                 <th className="th">Part Number</th>
                 <th className="th">Description</th>
@@ -252,7 +257,7 @@ export default function ProcurementPage() {
 
         {tab === "review" && (
           <table className="w-full">
-            <thead className="border-b border-border bg-surface/60">
+            <thead>
               <tr>
                 <th className="th">Part Number</th>
                 <th className="th">Description</th>
@@ -281,24 +286,29 @@ export default function ProcurementPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </SectionCard>
 
       {tab !== "make" && (
-        <div className="card mb-5">
-          <h2 className="section-title px-5 pt-5 pb-3">Items to Manufacture In-House ({make.length})</h2>
+        <SectionCard
+          tone="orange"
+          icon={Settings}
+          title="Items to Manufacture In-House"
+          count={make.length}
+          description="Parts made in the shop — material, grade and spec from the drawing."
+        >
           {makeTable}
-        </div>
+        </SectionCard>
       )}
 
-      <div className="card mb-5">
-        <div className="px-5 pt-5 pb-3">
-          <h2 className="section-title">Source Catalog ({catalogUsage.length})</h2>
-          <p className="text-xs text-steel mt-0.5">
-            Reference list of known parts — price, stock, and how many BOM lines the OCR/vision pipeline matched to each.
-          </p>
-        </div>
+      <SectionCard
+        tone="navy"
+        icon={Database}
+        title="Source Catalog"
+        count={catalogUsage.length}
+        description="Reference list of known parts — price, stock, and how many BOM lines the OCR/vision pipeline matched to each."
+      >
         <table className="w-full">
-          <thead className="border-y border-border bg-surface/60">
+          <thead>
             <tr>
               <th className="th">Component ID</th>
               <th className="th">Part Number</th>
@@ -327,8 +337,10 @@ export default function ProcurementPage() {
           </tbody>
         </table>
 
-        <div className="border-t border-border p-5">
-          <h3 className="text-sm font-semibold mb-3">Add Catalog Item</h3>
+        <div className="m-5 rounded-industrial border-2 border-dashed border-[#c9d2dd] bg-[#f6f8fb] p-4">
+          <h3 className="flex items-center gap-2 text-[15px] font-semibold text-navy mb-3">
+            <PlusCircle size={17} className="text-brand" /> Add Catalog Item
+          </h3>
           <div className="flex gap-3">
             <input className="input" placeholder="Part number" value={newItem.part_number}
               onChange={(e) => setNewItem({ ...newItem, part_number: e.target.value })} />
@@ -344,11 +356,10 @@ export default function ProcurementPage() {
             </button>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="card">
-        <h2 className="section-title px-5 pt-5 pb-3">Suppliers ({suppliers.length})</h2>
-        <ul className="divide-y divide-border border-t border-border">
+      <SectionCard tone="green" icon={Truck} title="Suppliers" count={suppliers.length} description="Vendors that catalog parts can be sourced from.">
+        <ul className="divide-y divide-border">
           {suppliers.map((s) => (
             <li key={s.id} className="px-5 py-3">
               <div className="text-sm font-medium">{s.name}</div>
@@ -357,7 +368,7 @@ export default function ProcurementPage() {
           ))}
           {suppliers.length === 0 && <li className="px-5 py-3 text-steel text-sm">No suppliers yet.</li>}
         </ul>
-      </div>
+      </SectionCard>
     </PageLayout>
   );
 }

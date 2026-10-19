@@ -146,3 +146,47 @@ export function ClearFiltersButton({ onClick }: { onClick: () => void }) {
     </div>
   );
 }
+
+const TONES = {
+  blue: { top: "border-t-brand", head: "bg-[#f2f6fd]", chip: "bg-brand text-white", pill: "bg-brand-light text-brand-dark" },
+  orange: { top: "border-t-accent", head: "bg-[#fff6ef]", chip: "bg-accent text-white", pill: "bg-accent-light text-accent-dark" },
+  navy: { top: "border-t-navy", head: "bg-[#f1f3f7]", chip: "bg-navy text-white", pill: "bg-[#e3e7ee] text-navy" },
+  green: { top: "border-t-[#1fa25c]", head: "bg-[#f0f9f4]", chip: "bg-[#1fa25c] text-white", pill: "bg-[#dcf3e6] text-[#14804a]" },
+};
+
+/** A clearly bounded content block: colored top edge, tinted header bar with an icon chip, title,
+ * optional count and description, then the body. Used to keep stacked sections visually apart. */
+export function SectionCard({
+  tone = "blue", icon: Icon, title, count, description, right, children, className = "",
+}: {
+  tone?: keyof typeof TONES;
+  icon: LucideIcon;
+  title: string;
+  count?: number;
+  description?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const t = TONES[tone];
+  return (
+    <section className={`card overflow-hidden border-t-4 ${t.top} mb-7 ${className}`}>
+      <header className={`flex items-center gap-3.5 px-5 py-3.5 border-b border-[#dfe5ec] ${t.head}`}>
+        <span className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${t.chip}`}>
+          <Icon size={19} strokeWidth={2} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <h2 className="flex items-center gap-2.5 text-[18px] font-bold text-navy">
+            {title}
+            {count !== undefined && (
+              <span className={`text-[13px] font-semibold px-2.5 py-0.5 rounded-full ${t.pill}`}>{count}</span>
+            )}
+          </h2>
+          {description && <p className="text-[13px] text-steel mt-0.5">{description}</p>}
+        </div>
+        {right}
+      </header>
+      {children}
+    </section>
+  );
+}
