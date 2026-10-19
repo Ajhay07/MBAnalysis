@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText, ClipboardList, Database, Truck, PlusCircle } from "lucide-react";
+import { ShoppingCart, Settings, Eye, Coins, Pencil, FileText, PlusCircle } from "lucide-react";
 import { api, Drawing } from "@/lib/api";
 import { CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
 import PageLayout, { AsideSection, AsideItem, SectionCard } from "@/components/PageLayout";
@@ -187,7 +187,7 @@ export default function ProcurementPage() {
 
       <SectionCard
         tone="blue"
-        icon={ClipboardList}
+        index="01"
         title="Purchase Requirements"
         description="Lines from this drawing's latest BOM, split by Make / Buy decision."
       >
@@ -291,7 +291,7 @@ export default function ProcurementPage() {
       {tab !== "make" && (
         <SectionCard
           tone="orange"
-          icon={Settings}
+          index="02"
           title="Items to Manufacture In-House"
           count={make.length}
           description="Parts made in the shop — material, grade and spec from the drawing."
@@ -302,7 +302,7 @@ export default function ProcurementPage() {
 
       <SectionCard
         tone="navy"
-        icon={Database}
+        index="03"
         title="Source Catalog"
         count={catalogUsage.length}
         description="Reference list of known parts — price, stock, and how many BOM lines the OCR/vision pipeline matched to each."
@@ -358,7 +358,7 @@ export default function ProcurementPage() {
         </div>
       </SectionCard>
 
-      <SectionCard tone="green" icon={Truck} title="Suppliers" count={suppliers.length} description="Vendors that catalog parts can be sourced from.">
+      <SectionCard tone="green" index="04" title="Suppliers" count={suppliers.length} description="Vendors that catalog parts can be sourced from.">
         <ul className="divide-y divide-border">
           {suppliers.map((s) => (
             <li key={s.id} className="px-5 py-3">

@@ -148,19 +148,19 @@ export function ClearFiltersButton({ onClick }: { onClick: () => void }) {
 }
 
 const TONES = {
-  blue: { top: "border-t-brand", head: "bg-[#f2f6fd]", chip: "bg-brand text-white", pill: "bg-brand-light text-brand-dark" },
-  orange: { top: "border-t-accent", head: "bg-[#fff6ef]", chip: "bg-accent text-white", pill: "bg-accent-light text-accent-dark" },
-  navy: { top: "border-t-navy", head: "bg-[#f1f3f7]", chip: "bg-navy text-white", pill: "bg-[#e3e7ee] text-navy" },
-  green: { top: "border-t-[#1fa25c]", head: "bg-[#f0f9f4]", chip: "bg-[#1fa25c] text-white", pill: "bg-[#dcf3e6] text-[#14804a]" },
+  blue: { top: "border-t-brand", head: "bg-[#f2f6fd]", chip: "border-brand text-brand", pill: "bg-brand-light text-brand-dark" },
+  orange: { top: "border-t-accent", head: "bg-[#fff6ef]", chip: "border-accent text-accent", pill: "bg-accent-light text-accent-dark" },
+  navy: { top: "border-t-navy", head: "bg-[#f1f3f7]", chip: "border-navy text-navy", pill: "bg-[#e3e7ee] text-navy" },
+  green: { top: "border-t-[#1fa25c]", head: "bg-[#f0f9f4]", chip: "border-[#1fa25c] text-[#14804a]", pill: "bg-[#dcf3e6] text-[#14804a]" },
 };
 
-/** A clearly bounded content block: colored top edge, tinted header bar with an icon chip, title,
+/** A clearly bounded content block: colored top edge, tinted header bar with a section number, title,
  * optional count and description, then the body. Used to keep stacked sections visually apart. */
 export function SectionCard({
-  tone = "blue", icon: Icon, title, count, description, right, children, className = "",
+  tone = "blue", index, title, count, description, right, children, className = "",
 }: {
   tone?: keyof typeof TONES;
-  icon: LucideIcon;
+  index: string;
   title: string;
   count?: number;
   description?: string;
@@ -172,8 +172,8 @@ export function SectionCard({
   return (
     <section className={`card overflow-hidden border-t-4 ${t.top} mb-7 ${className}`}>
       <header className={`flex items-center gap-3.5 px-5 py-3.5 border-b border-[#dfe5ec] ${t.head}`}>
-        <span className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${t.chip}`}>
-          <Icon size={19} strokeWidth={2} />
+        <span className={`w-10 h-10 border-2 flex items-center justify-center shrink-0 font-mono text-[15px] font-bold ${t.chip}`}>
+          {index}
         </span>
         <div className="flex-1 min-w-0">
           <h2 className="flex items-center gap-2.5 text-[18px] font-bold text-navy">
