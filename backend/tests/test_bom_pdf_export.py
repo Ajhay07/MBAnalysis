@@ -1,6 +1,6 @@
 from app.models.models import Analysis, Component, Drawing, DrawingStatus, MakeBuy
 from app.services.bom_service import generate_bom_from_analysis
-from app.services.export_service import bom_to_pdf_bytes
+from app.services.bom_pdf import bom_to_pdf_bytes
 
 
 def _make_bom(db, with_cost: bool):

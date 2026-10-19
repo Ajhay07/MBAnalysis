@@ -8,9 +8,10 @@ from app.database import get_db
 from app.models.models import Bom, BomLineItem, Drawing, AuditLog, User
 from app.schemas.api import BomOut, BomLineItemUpdate
 from app.services.bom_service import would_create_cycle, recompute_rollup, build_bom_tree
+from app.services.bom_pdf import bom_to_pdf_bytes
 from app.services.export_service import (
     bom_to_dataframe, purchase_list_dataframe, material_summary_dataframe,
-    dataframe_to_csv_bytes, dataframe_to_excel_bytes, bom_to_pdf_bytes,
+    dataframe_to_csv_bytes, dataframe_to_excel_bytes,
     bom_export_filename, purchase_list_filename, material_summary_filename,
 )
 
