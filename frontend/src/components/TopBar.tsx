@@ -12,6 +12,7 @@ const NAV = [
   { href: "/drawings", label: "Drawing Library" },
   { href: "/review", label: "Review Center" },
   { href: "/procurement", label: "Procurement" },
+  { href: "/indents", label: "Indent Sheets" },
   { href: "/calculations", label: "Calculations" },
 ];
 

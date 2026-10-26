@@ -267,6 +267,62 @@ export interface ReferenceBomResponse {
   discrepancy: ReferenceBomDiscrepancy | null;
 }
 
+export interface IndentLine {
+  id: string;
+  sl_no: number;
+  mtl_spec: string;
+  size_text: string;
+  wt_qty: number | null;
+  unit: string;
+  bom_line_item_id: string | null;
+  indent_rule_id: string | null;
+  source: "bom_line" | "rule" | "manual" | string;
+  requires_confirmation: boolean;
+  note: string;
+}
+
+export interface Indent {
+  id: string;
+  bom_id: string;
+  drawing_id: string;
+  version: number;
+  wo_number: string;
+  party_name: string;
+  required_on: string;
+  serial_no: string;
+  indent_date: string;
+  assembly_quantity: number;
+  status: "Draft" | "Approved" | "Rejected" | string;
+  created_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  lines: IndentLine[];
+}
+
+export interface IndentGenerateRequest {
+  assembly_quantity: number;
+  wo_number?: string;
+  party_name?: string;
+  required_on?: string;
+  serial_no?: string;
+  indent_date?: string;
+  rule_ids?: string[];
+}
+
+export interface IndentRule {
+  id: string;
+  name: string;
+  mtl_spec: string;
+  size_text: string;
+  unit: string;
+  formula: "fixed_qty" | "per_assembly" | "manual_required" | string;
+  value: number | null;
+  notes: string;
+  active: boolean;
+  created_by: string;
+  created_at: string;
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -397,6 +453,18 @@ export const api = {
   rejectRequisition: (id: string) =>
     request<Requisition>(`/api/inventory/requisitions/${id}/reject`, { method: "POST" }),
 
+  listIndentsForBom: (bomId: string) => request<Indent[]>(`/api/boms/${bomId}/indents`),
+  generateIndent: (bomId: string, payload: IndentGenerateRequest) =>
+    request<Indent>(`/api/boms/${bomId}/indents`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  getIndent: (id: string) => request<Indent>(`/api/indents/${id}`),
+  approveIndent: (id: string) => request<Indent>(`/api/indents/${id}/approve`, { method: "POST" }),
+  rejectIndent: (id: string) => request<Indent>(`/api/indents/${id}/reject`, { method: "POST" }),
+  listIndentRules: () => request<IndentRule[]>("/api/indent-rules"),
+
   calc: (endpoint: string, payload: Record<string, unknown>) =>
     request<any>(`/api/calculations/${endpoint}`, {
       method: "POST",
@@ -411,6 +479,10 @@ export function drawingFileUrl(id: string): string {
 
 export function drawingPagePreviewUrl(id: string, pageNumber: number): string {
   return `/api/drawings/${id}/pages/${pageNumber}/preview`;
+}
+
+export function indentPdfUrl(indentId: string): string {
+  return `/api/indents/${indentId}/pdf`;
 }
 
 export function bomExportUrl(

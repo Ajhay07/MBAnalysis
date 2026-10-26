@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, List, GitBranch } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, List, GitBranch, ClipboardList } from "lucide-react";
 import { Bom, BomLineItem, BomTreeNode, bomExportUrl } from "@/lib/api";
 import { MakeBuyBadge } from "@/components/Badges";
 import { Download } from "lucide-react";
@@ -95,6 +96,13 @@ export default function BomPanel({ bom, tree, onUpdate }: BomPanelProps) {
               <Download size={12} /> CSV
             </a>
           </div>
+          <Link
+            href="/indents"
+            className="flex items-center gap-1.5 text-xs border border-border rounded-industrial px-2.5 py-1.5 bg-white hover:bg-surface"
+            title="Generate an MB indent sheet from this BOM"
+          >
+            <ClipboardList size={12} /> Generate Indent
+          </Link>
         </div>
       </div>
 
