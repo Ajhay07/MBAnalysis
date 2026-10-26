@@ -5,6 +5,8 @@ this module reading the reference indent sheet - the arithmetic is proven indepe
 hardcoded WO-9347 value living in production code (app/services/indent_service.py contains no
 mention of "9347" anywhere).
 """
+import uuid
+
 from app.models.models import (
     Analysis, Component, Drawing, DrawingStatus, Indent, IndentRule, IndentRuleFormula, MakeBuy, User, UserRole,
 )
@@ -52,7 +54,11 @@ def _make_9347_bom(db):
 
 
 def _editor(db):
-    user = User(email="engineer@example.com", hashed_password=hash_password("x"),
+    """Creates a fresh engineer user, scoped with a unique email per call so repeated
+    calls across tests never collide on the users.email unique constraint (the shared
+    `db` fixture in this suite persists rows across tests rather than rolling back)."""
+    email = f"engineer-{uuid.uuid4().hex[:12]}@example.com"
+    user = User(email=email, hashed_password=hash_password("x"),
                 role=UserRole.ENGINEER, is_active=True)
     db.add(user)
     db.commit()
