@@ -253,6 +253,79 @@ class AllocationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class IndentLineOut(BaseModel):
+    id: str
+    sl_no: int
+    mtl_spec: str
+    size_text: str
+    wt_qty: float | None = None
+    unit: str
+    bom_line_item_id: str | None = None
+    indent_rule_id: str | None = None
+    source: str
+    requires_confirmation: bool
+    note: str
+
+    model_config = {"from_attributes": True}
+
+
+class IndentOut(BaseModel):
+    id: str
+    bom_id: str
+    drawing_id: str
+    version: int
+    wo_number: str
+    party_name: str
+    required_on: str
+    serial_no: str
+    indent_date: str
+    assembly_quantity: float
+    status: str
+    created_at: datetime
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    lines: list[IndentLineOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class IndentGenerateRequest(BaseModel):
+    assembly_quantity: float
+    wo_number: str = ""
+    party_name: str = ""
+    required_on: str = ""
+    serial_no: str = ""
+    indent_date: str = ""
+    rule_ids: list[str] = []
+
+
+class IndentRuleIn(BaseModel):
+    name: str
+    mtl_spec: str = ""
+    size_text: str = ""
+    unit: str = "Pcs"
+    formula: str = "manual_required"  # fixed_qty | per_assembly | manual_required
+    value: float | None = None
+    notes: str = ""
+    active: bool = True
+
+
+class IndentRuleOut(BaseModel):
+    id: str
+    name: str
+    mtl_spec: str
+    size_text: str
+    unit: str
+    formula: str
+    value: float | None = None
+    notes: str
+    active: bool
+    created_by: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class DashboardMetrics(BaseModel):
     total_drawings: int
     status_breakdown: dict[str, int]

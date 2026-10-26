@@ -335,6 +335,94 @@ class PurchaseRequisitionLine(Base):
     requisition = relationship("PurchaseRequisition", back_populates="lines")
 
 
+class IndentStatus(str, enum.Enum):
+    DRAFT = "Draft"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
+
+
+class IndentRuleFormula(str, enum.Enum):
+    # wt_qty = rule.value, independent of assembly_quantity (e.g. a fixed per-job packaging item)
+    FIXED_QTY = "fixed_qty"
+    # wt_qty = rule.value * assembly_quantity (e.g. a consumable rate per assembly)
+    PER_ASSEMBLY = "per_assembly"
+    # No deterministic value available - always emitted with wt_qty=None and
+    # requires_confirmation=True. Used for approved-but-not-yet-quantified requirements
+    # (see README/spec: "do not invent universal consumable rates").
+    MANUAL_REQUIRED = "manual_required"
+
+
+class IndentRule(Base):
+    """A configurable, auditable rule describing an indent line that is not itself a BOM
+    component - typically a manufacturing consumable or packaging requirement (filler wire,
+    electrode, stiffener, wooden box, ...). Deliberately NOT work-order-specific: match_category
+    scopes which BOM categories/materials it applies near (informational only, never silently
+    auto-applied against a drawing it wasn't approved for), active users opt it into an indent
+    generation run explicitly. See app.services.indent_service.apply_indent_rules."""
+    __tablename__ = "indent_rules"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    name = Column(String, nullable=False)
+    mtl_spec = Column(String, default="")  # printed in the MTL SPEC column, e.g. "Fillerwire"
+    size_text = Column(String, default="")  # printed in the SIZE column, e.g. "ER 309 - dia2.4 x 1000"
+    unit = Column(String, default="Pcs")
+    formula = Column(SAEnum(IndentRuleFormula), default=IndentRuleFormula.MANUAL_REQUIRED, nullable=False)
+    value = Column(Float, nullable=True)  # meaning depends on `formula`; null for MANUAL_REQUIRED
+    notes = Column(Text, default="")
+    active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(String, default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Indent(Base):
+    """A generated MB Metallic Bellows indent sheet for a specific BOM + assembly quantity.
+    Versioned per bom_id like Bom itself. Never auto-creates a PurchaseRequisition - that
+    remains a distinct, explicitly authorized action (see app.routers.procurement)."""
+    __tablename__ = "indents"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    bom_id = Column(String, ForeignKey("boms.id"), nullable=False)
+    drawing_id = Column(String, ForeignKey("drawings.id"), nullable=False)
+    version = Column(Integer, default=1)
+    wo_number = Column(String, default="")
+    party_name = Column(String, default="")
+    required_on = Column(String, default="")
+    serial_no = Column(String, default="")
+    indent_date = Column(String, default="")  # free-text as printed on the form (DD-MM-YY)
+    assembly_quantity = Column(Float, nullable=False)
+    status = Column(SAEnum(IndentStatus), default=IndentStatus.DRAFT, nullable=False)
+    created_by = Column(String, default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+
+    bom = relationship("Bom")
+    drawing = relationship("Drawing")
+    lines = relationship("IndentLine", back_populates="indent", cascade="all, delete-orphan",
+                          order_by="IndentLine.sl_no")
+
+
+class IndentLine(Base):
+    __tablename__ = "indent_lines"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    indent_id = Column(String, ForeignKey("indents.id"), nullable=False)
+    sl_no = Column(Integer, nullable=False)
+    mtl_spec = Column(String, default="")
+    size_text = Column(String, default="")
+    wt_qty = Column(Float, nullable=True)  # null when requires_confirmation is True
+    unit = Column(String, default="Nos")
+    # Provenance: exactly one of these identifies where this line came from.
+    bom_line_item_id = Column(String, ForeignKey("bom_line_items.id"), nullable=True)
+    indent_rule_id = Column(String, ForeignKey("indent_rules.id"), nullable=True)
+    source = Column(String, default="bom_line")  # bom_line | rule | manual
+    requires_confirmation = Column(Boolean, default=False, nullable=False)
+    note = Column(Text, default="")
+
+    indent = relationship("Indent", back_populates="lines")
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
