@@ -9,9 +9,6 @@ from app.config import get_settings
 from app.providers.base import DrawingAnalysisProvider
 from app.providers.openai_provider import (
     SYSTEM_PROMPT,
-    REQUEST_TIMEOUT_SECONDS,
-    MAX_TRANSIENT_RETRIES,
-    BACKOFF_BASE_SECONDS,
     ProviderAuthError,
     ProviderTransientError,
 )
@@ -19,6 +16,16 @@ from app.schemas.analysis import AnalysisResult
 
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
+
+# Gemini gets its own (more generous) retry/timeout budget rather than sharing OpenAI's -
+# observed live 503 UNAVAILABLE ("Spikes in demand are usually temporary") and 504
+# DEADLINE_EXCEEDED errors from Google's own servers under load, which the shared
+# MAX_TRANSIENT_RETRIES=2 / BACKOFF_BASE_SECONDS=1.5 budget (~4.5s of total backoff) rarely
+# outlasts. More retries with longer exponential backoff gives transient Google-side capacity
+# blips a real chance to clear before the drawing is marked Failed.
+REQUEST_TIMEOUT_SECONDS = 90
+MAX_TRANSIENT_RETRIES = 4
+BACKOFF_BASE_SECONDS = 3.0
 
 
 def _normalize_nulls(data, model_cls: type[BaseModel]):

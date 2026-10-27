@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     OCR_ENABLED: bool = True
     OCR_LANGUAGE: str = "en"
     OCR_USE_GPU: bool = False
-    PDF_RENDER_DPI: int = 288
+    # Lower DPI means a smaller image payload sent to the AI vision provider, which reduces
+    # Gemini's own server-side processing time per request and makes a 504 DEADLINE_EXCEEDED
+    # (Google's own deadline expiring, not ours) less likely under load. 200 DPI is still well
+    # above what's needed for OCR/vision legibility on engineering drawings.
+    PDF_RENDER_DPI: int = 200
     OCR_CONFIDENCE_THRESHOLD: float = 0.5
     # Deskew defaults off: the minAreaRect-based angle estimate is unreliable on sparse/
     # high-aspect-ratio text layouts (verified empirically - it can rotate otherwise-straight

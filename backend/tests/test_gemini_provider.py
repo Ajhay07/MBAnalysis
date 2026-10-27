@@ -138,7 +138,10 @@ def test_safety_blocked_response_rejected_cleanly(monkeypatch):
 
 def test_rate_limit_error_retries_then_raises_transient(monkeypatch):
     from google.genai import errors as genai_errors
-    from app.providers.openai_provider import ProviderTransientError, MAX_TRANSIENT_RETRIES
+    from app.providers.openai_provider import ProviderTransientError
+    # Gemini has its own (more generous) retry budget - see app/providers/gemini_provider.py -
+    # deliberately not the same constant as OpenAI's, so this imports from gemini_provider.
+    from app.providers.gemini_provider import MAX_TRANSIENT_RETRIES
 
     provider = _make_provider(monkeypatch)
     monkeypatch.setattr("time.sleep", lambda *_: None)  # don't actually wait in tests

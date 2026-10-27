@@ -32,7 +32,7 @@ from app.services.bom_candidate_service import build_candidate_bom
 from app.services.reference_bom_service import detect_reference_bom_table
 
 def _pdf_raster_zoom() -> float:
-    """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 288) is what
+    """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 200) is what
     both OCR and vision models need to read small title-block text reliably."""
     return get_settings().PDF_RENDER_DPI / 72.0
 
