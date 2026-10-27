@@ -168,6 +168,46 @@ def test_rate_limit_error_succeeds_after_transient_retry(monkeypatch):
     assert provider.client.models.generate_content.call_count == 2
 
 
+def test_daily_quota_exhausted_fails_fast_without_retrying(monkeypatch):
+    """A 429 RESOURCE_EXHAUSTED tied to a *per-day* quota (Free Tier's
+    GenerateRequestsPerDayPerProjectPerModel limit) must raise immediately on the first
+    attempt - retrying it can only burn more of an already-exhausted daily quota during a
+    multi-hour retryDelay, unlike an ordinary short-lived 429 (see
+    test_rate_limit_error_retries_then_raises_transient, which does retry)."""
+    from google.genai import errors as genai_errors
+    from app.providers.openai_provider import ProviderTransientError
+
+    provider = _make_provider(monkeypatch)
+    monkeypatch.setattr("time.sleep", lambda *_: None)  # would fail the test if ever called
+    exc = genai_errors.ClientError(
+        code=429,
+        response_json={
+            "error": {
+                "message": "You exceeded your current quota, please check your plan and "
+                "billing details.",
+                "status": "RESOURCE_EXHAUSTED",
+                "details": [{
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{
+                        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                        "quotaValue": "20",
+                    }],
+                }, {
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "70949s",
+                }],
+            },
+        },
+    )
+    provider.client.models.generate_content = MagicMock(side_effect=exc)
+
+    with pytest.raises(ProviderTransientError, match="daily request quota"):
+        provider.analyze(image_path=_fake_image_file(), ocr_text="", drawing_number="GEM-1")
+
+    # Fails on the very first attempt - never retried.
+    assert provider.client.models.generate_content.call_count == 1
+
+
 def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "")
     from app.config import get_settings

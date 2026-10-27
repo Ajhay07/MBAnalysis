@@ -94,6 +94,19 @@ class GeminiVisionProvider(DrawingAnalysisProvider):
         code = getattr(exc, "code", None)
         return code in (401, 403)
 
+    def _is_quota_exhausted_error(self, exc: Exception) -> bool:
+        """A 429 RESOURCE_EXHAUSTED tied to a *per-day* quota (observed live: Free Tier's
+        GenerateRequestsPerDayPerProjectPerModel limit, e.g. 20/day for gemini-3.8-flash) is not
+        the same thing as an ordinary short-lived rate limit. Google's own retryDelay for it is
+        measured in hours (observed: ~19h42m), so retrying with our few-second backoff can only
+        ever fail again while silently burning more of the exhausted daily quota. This must be
+        detected and failed fast, separately from the general 429 branch in _is_transient_error
+        (which still retries an ordinary short-lived 429, e.g. per-minute rate limiting)."""
+        if getattr(exc, "code", None) != 429:
+            return False
+        text = str(exc)
+        return "RESOURCE_EXHAUSTED" in text and "PerDay" in text
+
     def _is_transient_error(self, exc: Exception) -> bool:
         code = getattr(exc, "code", None)
         if code in (408, 409, 429, 500, 502, 503, 504):
@@ -124,6 +137,14 @@ class GeminiVisionProvider(DrawingAnalysisProvider):
             except genai_errors.APIError as exc:
                 if self._is_auth_error(exc):
                     raise ProviderAuthError(f"Gemini authentication/authorization failed: {exc}") from exc
+                if self._is_quota_exhausted_error(exc):
+                    raise ProviderTransientError(
+                        "Gemini daily request quota is exhausted for this API key/model "
+                        "(Free Tier limits generate_content calls per day). Retrying now would "
+                        "only fail again - wait for the daily quota to reset (Google's own "
+                        "response gives the reset time), or switch to a paid plan / different "
+                        f"model with headroom. Raw error: {exc}"
+                    ) from exc
                 if self._is_transient_error(exc) and attempt < MAX_TRANSIENT_RETRIES:
                     last_exc = exc
                     time.sleep(BACKOFF_BASE_SECONDS * (2 ** attempt))
