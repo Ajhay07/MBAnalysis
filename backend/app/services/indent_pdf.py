@@ -77,6 +77,11 @@ def indent_to_pdf_bytes(indent: Indent) -> bytes:
             Paragraph(f"Date: {escape(indent.indent_date or '—')}", VALUE),
         ]],
         colWidths=[66, content_w * 0.28, content_w * 0.34, content_w - 66 - content_w * 0.62],
+        # Fixed row height, not just "tall enough for the text": the logo is drawn at a fixed
+        # canvas position by the page decorator below, independent of how tall this flowable
+        # row ends up being. Without a minimum here, short header text lets the next table
+        # (PARTY'S NAME / SL.No.) flow upward into the logo's footprint and overlap it.
+        rowHeights=[54],
     )
     header.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
