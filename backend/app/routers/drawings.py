@@ -110,13 +110,22 @@ def get_drawing(drawing_id: str, db: Session = Depends(get_db),
 @router.get("/{drawing_id}/file")
 def get_drawing_file(drawing_id: str, db: Session = Depends(get_db),
                       current_user: User = Depends(get_current_user)):
+    # content_disposition_type="inline" matters here: the frontend points its <embed
+    # type="application/pdf"> and <img> viewer tags directly at this URL (see
+    # frontend/src/app/drawings/[id]/page.tsx and DrawingThumb.tsx), and Starlette's
+    # FileResponse defaults to "attachment" whenever a filename is given - that tells the
+    # browser to download the file rather than render it, which is why the viewer/thumbnail
+    # could come back blank for a single-page PDF even though the file genuinely exists on
+    # disk. There's no separate download endpoint - this one URL is used for both viewing and
+    # the browser's own "save as" affordance (e.g. right-click on the embedded PDF), so inline
+    # is the correct default for both.
     drawing = db.query(Drawing).get(drawing_id)
     if not drawing:
         raise HTTPException(404, "Drawing not found")
     path = drawing_abspath(drawing)
     if not os.path.exists(path):
         raise HTTPException(404, "File missing on disk")
-    return FileResponse(path, filename=drawing.file_name)
+    return FileResponse(path, filename=drawing.file_name, content_disposition_type="inline")
 
 
 @router.delete("/{drawing_id}")

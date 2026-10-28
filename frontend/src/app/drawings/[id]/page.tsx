@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
-import { ZoomIn, ZoomOut, CheckCircle2, FileSpreadsheet, ChevronLeft, ChevronRight, Scan, RotateCcw, RotateCw, Maximize2 } from "lucide-react";
-import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse } from "@/lib/api";
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Scan, RotateCcw, RotateCw, Maximize2, ClipboardList, Download, AlertTriangle } from "lucide-react";
+import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse, Indent, indentPdfUrl } from "@/lib/api";
 import { StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
@@ -76,6 +76,19 @@ export default function DrawingViewerPage() {
   const [catalogById, setCatalogById] = useState<Record<string, any>>({});
   const [allDrawings, setAllDrawings] = useState<Drawing[]>([]);
   const [tab, setTab] = useState<"info" | "components" | "bom">("info");
+  // Single-action indent workflow: the user just wants "upload -> Indent Sheet", not a
+  // separate manual "Approve Analysis" then "Generate BOM" review step surfaced as its own
+  // thing. The BOM still gets generated (indent generation and inventory availability both
+  // depend on it), but it happens automatically behind "Generate Indent Sheet" rather than as
+  // a button the user has to click on its own - the inline form below collects only what a
+  // BOM genuinely can't contain on its own (assembly quantity, W.O. number, etc.).
+  const [showIndentForm, setShowIndentForm] = useState(false);
+  const [indentForm, setIndentForm] = useState({
+    assembly_quantity: "", wo_number: "", party_name: "", required_on: "", serial_no: "", indent_date: "",
+  });
+  const [indentSubmitting, setIndentSubmitting] = useState(false);
+  const [indentError, setIndentError] = useState<string | null>(null);
+  const [generatedIndent, setGeneratedIndent] = useState<Indent | null>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
@@ -174,22 +187,46 @@ export default function DrawingViewerPage() {
     }
   }
 
-  async function approve() {
-    if (!activeAnalysis) return;
-    await api.approveAnalysis(activeAnalysis.id);
-    load();
+  /** The BOM a real indent needs always exists by the time this runs, but the user never has
+   * to click a separate "Generate BOM" button to get there - this reuses the current one (any
+   * BOM already generated for this analysis) or generates it silently on demand. */
+  async function ensureBom(): Promise<Bom> {
+    if (bom) return bom;
+    if (!activeAnalysis) throw new Error("No analysis to generate a BOM from yet.");
+    const generated = await api.generateBom(activeAnalysis.id);
+    setBomMsg(`BOM v${generated.version} generated with ${generated.line_items.length} line items.`);
+    setBom(generated);
+    setBomTree(await api.getBomTree(generated.id));
+    return generated;
   }
 
-  async function generateBom() {
-    if (!activeAnalysis) return;
-    setBusy(true);
+  async function submitIndent() {
+    const qty = parseFloat(indentForm.assembly_quantity);
+    if (!qty || qty <= 0) {
+      setIndentError("Assembly quantity must be a positive number.");
+      return;
+    }
+    setIndentSubmitting(true);
+    setIndentError(null);
     try {
-      const generated = await api.generateBom(activeAnalysis.id);
-      setBomMsg(`BOM v${generated.version} generated with ${generated.line_items.length} line items.`);
-      setBom(generated);
-      setBomTree(await api.getBomTree(generated.id));
+      if (activeAnalysis && drawing && drawing.status === "NeedsReview") {
+        await api.approveAnalysis(activeAnalysis.id);
+      }
+      const targetBom = await ensureBom();
+      const indent = await api.generateIndent(targetBom.id, {
+        assembly_quantity: qty,
+        wo_number: indentForm.wo_number.trim(),
+        party_name: indentForm.party_name.trim(),
+        required_on: indentForm.required_on.trim(),
+        serial_no: indentForm.serial_no.trim(),
+        indent_date: indentForm.indent_date.trim(),
+      });
+      setGeneratedIndent(indent);
+      await load();
+    } catch (e: any) {
+      setIndentError(e.message || "Failed to generate indent sheet.");
     } finally {
-      setBusy(false);
+      setIndentSubmitting(false);
     }
   }
 
@@ -619,8 +656,74 @@ export default function DrawingViewerPage() {
                     <InventoryAvailabilityPanel bomId={bom.id} />
                   </>
                 ) : (
-                  <div className="border border-dashed border-border rounded-industrial p-6 text-sm text-steel text-center">
-                    No BOM yet. Review the components, then click &quot;Generate BOM&quot;.
+                  <div className="border border-dashed border-border rounded-industrial p-6 text-sm text-steel text-center mb-4">
+                    No BOM yet - one is generated automatically the moment you fill in the
+                    indent details below and click &quot;Generate Indent Sheet&quot;.
+                  </div>
+                )}
+
+                {showIndentForm && (
+                  <div className="card p-4 mt-4">
+                    <h3 className="text-sm font-semibold mb-1 flex items-center gap-1.5">
+                      <ClipboardList size={15} /> Generate Indent Sheet
+                    </h3>
+                    <p className="text-xs text-steel mb-3">
+                      Quantities are computed deterministically: qty per assembly &times; assembly
+                      quantity. Nothing here is estimated by AI.
+                    </p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">Assembly Quantity *</span>
+                        <input className="input" type="number" min="0" step="any" placeholder="e.g. 16"
+                          value={indentForm.assembly_quantity}
+                          onChange={(e) => setIndentForm({ ...indentForm, assembly_quantity: e.target.value })} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">W.O. No.</span>
+                        <input className="input" placeholder="e.g. 9347" value={indentForm.wo_number}
+                          onChange={(e) => setIndentForm({ ...indentForm, wo_number: e.target.value })} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">Party&apos;s Name</span>
+                        <input className="input" value={indentForm.party_name}
+                          onChange={(e) => setIndentForm({ ...indentForm, party_name: e.target.value })} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">Required On</span>
+                        <input className="input" placeholder="e.g. 200 NB x 188 mm lg." value={indentForm.required_on}
+                          onChange={(e) => setIndentForm({ ...indentForm, required_on: e.target.value })} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">SL.No.</span>
+                        <input className="input" value={indentForm.serial_no}
+                          onChange={(e) => setIndentForm({ ...indentForm, serial_no: e.target.value })} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-xs text-graphite mb-1">Date</span>
+                        <input className="input" placeholder="DD-MM-YY" value={indentForm.indent_date}
+                          onChange={(e) => setIndentForm({ ...indentForm, indent_date: e.target.value })} />
+                      </label>
+                    </div>
+                    {indentError && (
+                      <div className="mt-3 flex items-start gap-2 rounded-industrial border border-[#f3c7c5] bg-[#fde2e1] px-4 py-3 text-sm text-[#b42318]">
+                        <AlertTriangle size={16} className="shrink-0 mt-0.5" /> {indentError}
+                      </div>
+                    )}
+                    <button className="btn-accent mt-3" disabled={indentSubmitting} onClick={submitIndent}>
+                      <ClipboardList size={15} /> {indentSubmitting ? "Generating..." : "Generate"}
+                    </button>
+
+                    {generatedIndent && (
+                      <div className="mt-4 border-t border-border pt-3 flex items-center justify-between gap-3">
+                        <span className="text-sm text-emerald-700">
+                          Indent v{generatedIndent.version} generated with {generatedIndent.lines.length} line items.
+                        </span>
+                        <a href={indentPdfUrl(generatedIndent.id)} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs border border-border rounded-industrial px-2.5 py-1.5 bg-white hover:bg-surface">
+                          <Download size={12} /> Download PDF
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -628,19 +731,16 @@ export default function DrawingViewerPage() {
           </div>
 
           {activeAnalysis && (
-            <div className="border-t border-border p-4 flex items-center justify-between gap-3 bg-white">
-              <button className="btn-secondary flex-1" onClick={approve}>
-                <CheckCircle2 size={15} /> Approve Analysis
-              </button>
+            <div className="border-t border-border p-4 bg-white">
               <button
-                className="btn-accent flex-1"
+                className="btn-accent w-full"
                 disabled={busy}
-                onClick={async () => {
-                  await generateBom();
+                onClick={() => {
                   setTab("bom");
+                  setShowIndentForm(true);
                 }}
               >
-                <FileSpreadsheet size={15} /> Generate BOM
+                <ClipboardList size={15} /> Generate Indent Sheet
               </button>
             </div>
           )}
