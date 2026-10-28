@@ -111,11 +111,18 @@ def test_pipeline_runs_end_to_end_and_persists_no_reference_bom_table(db):
     )
 
 
-def test_pipeline_still_produces_plausible_candidate_bom_from_demo_provider(db):
+def test_pipeline_still_produces_plausible_candidate_bom_from_demo_provider(db, monkeypatch):
     """The fixture having no reference BOM table must not suppress candidate-BOM generation:
     the deterministic bom_candidate_service merge (provider components + geometry-derived
     counted-feature candidates) should still run and persist real Component rows, via the
-    actual Demo provider path (the only provider ever exercised for this feature)."""
+    actual Demo provider path (the only provider ever exercised for this feature). DemoProvider
+    is selected explicitly since it's no longer the implicit no-key default - the real
+    DeterministicProvider default legitimately finds no BOM table on this fixture either (that's
+    the whole point of the fixture) and never fabricates repeated_features, so it alone would
+    correctly persist zero components here, which isn't what this specific test is checking."""
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = Drawing(
         drawing_number="MB-10045-REV-C-2", title="[TEST] Pump Housing Bracket (no BOM table) 2",
         revision="C", file_name="no_bom_table_fixture_e2e_2.png",

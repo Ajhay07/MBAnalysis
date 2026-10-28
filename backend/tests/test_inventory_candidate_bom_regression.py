@@ -64,7 +64,13 @@ def _build_bom_from_candidate_components(db, analysis) -> Bom:
     return bom
 
 
-def test_availability_check_on_geometry_driven_candidate_bom(db):
+def test_availability_check_on_geometry_driven_candidate_bom(db, monkeypatch):
+    # Needs the demo provider's repeated_features -> geometry-derived candidate specifically -
+    # selected explicitly since DemoProvider is no longer the implicit no-key default (see
+    # app.providers.get_provider).
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = _make_drawing(db)
     analysis = run_analysis(db, drawing)
 

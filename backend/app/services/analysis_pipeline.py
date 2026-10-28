@@ -244,8 +244,10 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
         job.stage = JobStage.EXTRACTING_PAGES
         db.commit()
 
+        page_count = 1
         if ext == ".pdf":
             pages = rasterize_pdf_pages(path, drawing)
+            page_count = len(pages)
             for page_number, image, embedded_text in pages:
                 ocr_text = embedded_text
                 job.stage = JobStage.OCR
@@ -326,6 +328,7 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
             materials=all_materials,
             raw_ocr_text="\n\n".join(all_ocr_text),
             overall_confidence=overall_confidence,
+            page_count=page_count,
         )
         db.add(analysis)
         db.flush()

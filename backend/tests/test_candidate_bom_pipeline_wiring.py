@@ -30,7 +30,13 @@ def _make_drawing(db, name: str = "candidate_bom_wiring.png") -> Drawing:
     return drawing
 
 
-def test_pipeline_persists_counted_feature_component_from_demo_provider(db):
+def test_pipeline_persists_counted_feature_component_from_demo_provider(db, monkeypatch):
+    # DemoProvider is no longer the no-key default (see app.providers.get_provider -
+    # DeterministicProvider is, and it never fabricates repeated_features), so this
+    # demo-specific wiring test now selects DemoProvider explicitly.
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = _make_drawing(db)
     analysis = run_analysis(db, drawing)
 

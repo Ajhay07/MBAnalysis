@@ -106,21 +106,19 @@ class Analysis(Base):
     materials = Column(JSON, default=list)
     raw_ocr_text = Column(Text, default="")
     overall_confidence = Column(Float, default=0.0)
+    # How many pages run_analysis actually rasterized/processed for this drawing. Persisted
+    # explicitly (set directly in app.services.analysis_pipeline.run_analysis from the real
+    # page loop) rather than derived from components'/dimensions' source_page, which silently
+    # collapsed to 1 whenever a provider legitimately found zero evidence on every page (e.g.
+    # the deterministic provider on a multi-page drawing with no BOM table or recognizable
+    # dimension callouts) even though every page was genuinely processed.
+    page_count = Column(Integer, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     drawing = relationship("Drawing", back_populates="analyses")
     components = relationship("Component", back_populates="analysis", cascade="all, delete-orphan")
     reference_bom_tables = relationship(
         "ReferenceBomTable", back_populates="analysis", cascade="all, delete-orphan")
-
-    @property
-    def page_count(self) -> int:
-        """Highest source_page across this analysis's components (and recorded dimensions),
-        i.e. how many pages the frontend should let the user page through. Derived, not
-        persisted - no migration needed since it is computed from existing data."""
-        pages = [c.source_page or 1 for c in self.components]
-        pages.extend(d.get("page", 1) for d in (self.dimensions or []) if isinstance(d, dict))
-        return max(pages) if pages else 1
 
 
 class Component(Base):

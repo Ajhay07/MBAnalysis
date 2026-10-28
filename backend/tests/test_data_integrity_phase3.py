@@ -41,7 +41,14 @@ def _make_drawing(db, name: str) -> Drawing:
     return drawing
 
 
-def test_component_source_page_and_bbox_persist_through_reprocess(db):
+def test_component_source_page_and_bbox_persist_through_reprocess(db, monkeypatch):
+    # Needs a provider that reliably produces components against this 1x1 placeholder PNG (no
+    # real BOM table for the deterministic default to find) - DemoProvider, selected explicitly
+    # since it's no longer the implicit no-key default. This test is about source_page/bbox
+    # plumbing through retries, not about which provider ran.
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = _make_drawing(db, "linkage.png")
     analysis1 = run_analysis(db, drawing)
     components1 = db.query(Component).filter(Component.analysis_id == analysis1.id).all()
@@ -64,10 +71,13 @@ def test_component_source_page_and_bbox_persist_through_reprocess(db):
     assert {c.id for c in still_there} == {c.id for c in components1}
 
 
-def test_verified_component_not_overwritten_by_retry(db):
+def test_verified_component_not_overwritten_by_retry(db, monkeypatch):
     """A reviewer verifies a component on analysis v1; retrying the pipeline must create a new
     analysis v2 with its own components, leaving the v1 verified component's fields exactly as
     the reviewer left them (no in-place mutation, no row deleted/replaced)."""
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = _make_drawing(db, "verify_retry.png")
     analysis1 = run_analysis(db, drawing)
     components1 = db.query(Component).filter(Component.analysis_id == analysis1.id).all()

@@ -133,6 +133,14 @@ def test_ocr_unavailable_does_not_crash_pipeline_and_does_not_fabricate_success(
     a hard failure - document that explicitly: the pipeline must still reach a real terminal
     stage (not get stuck), and components are still genuinely derived from the provider, not
     faked."""
+    # Explicit DemoProvider: DemoProvider is no longer the implicit no-key default (see
+    # app.providers.get_provider), and this test specifically wants "the provider still ran and
+    # produced something" regardless of OCR - the deterministic provider would legitimately
+    # return zero components for this 1x1 placeholder PNG regardless of OCR availability, which
+    # would defeat the point of this test.
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     drawing = _make_drawing(db, "no_ocr.png")
     monkeypatch.setattr("app.services.paddle_ocr._get_engine", lambda: None)
 
@@ -163,9 +171,13 @@ def test_retry_after_failure_increments_retry_count_and_can_succeed(db, monkeypa
     first_job = _latest_job(db, drawing.id)
     assert first_job.retry_count == 0
 
-    # Retry: simulate the /reprocess endpoint's retry_count accounting, and let the real
-    # (demo) provider succeed this time.
-    monkeypatch.undo()  # restore get_provider so the retry uses the real demo provider
+    # Retry: simulate the /reprocess endpoint's retry_count accounting, and let a real (demo)
+    # provider succeed this time. Set explicitly (rather than monkeypatch.undo(), which would
+    # now fall through to DeterministicProvider - the no-key default since this change - and
+    # legitimately return zero components for this placeholder PNG, defeating this test's
+    # "analysis.components" assertion below).
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
     prior_retries = db.query(Job).filter(Job.drawing_id == drawing.id).count()
     analysis = run_analysis(db, drawing, retry_count=prior_retries)
 
@@ -216,7 +228,9 @@ def test_reprocess_endpoint_retries_failed_real_drawing_never_demo_tagged(client
     resp2 = client.post(f"/api/drawings/{drawing.id}/reprocess", headers=headers)
     assert resp2.status_code == 200
     body = resp2.json()
-    assert body.get("provider") == "demo"  # real pipeline ran fresh, no seeded content leaked in
+    # real pipeline ran fresh (no seeded demo content leaked in) - "deterministic" is the real
+    # no-key default now (see app.providers.get_provider), not "demo".
+    assert body.get("provider") == "deterministic"
 
     jobs_resp = client.get(f"/api/drawings/{drawing.id}/jobs", headers=headers)
     assert jobs_resp.status_code == 200

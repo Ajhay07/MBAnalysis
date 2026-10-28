@@ -219,9 +219,14 @@ def test_missing_api_key_raises_runtime_error(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_get_provider_prefers_gemini_when_both_keys_set(monkeypatch):
+def test_get_provider_prefers_gemini_over_openai_when_explicitly_selected(monkeypatch):
+    """Both keys being present in the environment no longer implicitly selects Gemini - the
+    standard workflow defaults to the deterministic (non-AI) provider regardless (see
+    tests/test_provider_fallback.py). AI_PROVIDER=gemini is the explicit opt-in that still
+    prefers Gemini over OpenAI when both keys happen to be set."""
     monkeypatch.setenv("GEMINI_API_KEY", "fake-gemini-key")
     monkeypatch.setenv("OPENAI_API_KEY", "fake-openai-key")
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
     from app.config import get_settings
     get_settings.cache_clear()
     from app.providers import get_provider
@@ -229,4 +234,5 @@ def test_get_provider_prefers_gemini_when_both_keys_set(monkeypatch):
 
     provider = get_provider()
     assert isinstance(provider, GeminiVisionProvider)
+    monkeypatch.setenv("AI_PROVIDER", "")
     get_settings.cache_clear()
