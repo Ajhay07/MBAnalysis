@@ -45,5 +45,11 @@ def get_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_
 @router.get("/ai-status")
 def ai_status(current_user: User = Depends(get_current_user)):
     settings = get_settings()
-    vision_model = settings.GEMINI_MODEL if settings.ai_mode == "gemini" else settings.OPENAI_VISION_MODEL
+    if settings.ai_mode == "gemini":
+        vision_model = settings.GEMINI_MODEL
+    elif settings.ai_mode == "openai":
+        vision_model = settings.OPENAI_VISION_MODEL
+    else:
+        # deterministic/demo modes call no vision model at all.
+        vision_model = None
     return {"mode": settings.ai_mode, "vision_model": vision_model}

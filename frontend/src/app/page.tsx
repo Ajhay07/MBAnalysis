@@ -128,9 +128,15 @@ export default function DashboardPage() {
               {menuOpen && (
                 <div className="absolute right-0 mt-2 w-64 card py-1 z-40">
                   <div className="px-4 py-2 text-xs text-steel border-b border-border">
-                    AI mode:{" "}
-                    <span className={aiMode === "openai" || aiMode === "gemini" ? "text-emerald-700 font-medium" : "text-accent-dark font-medium"}>
-                      {aiMode === "gemini" ? "Gemini Vision" : aiMode === "openai" ? "OpenAI Vision" : "Demo (no API key)"}
+                    Extraction mode:{" "}
+                    <span className={aiMode === "demo" ? "text-accent-dark font-medium" : "text-emerald-700 font-medium"}>
+                      {aiMode === "gemini"
+                        ? "Gemini Vision"
+                        : aiMode === "openai"
+                        ? "OpenAI Vision"
+                        : aiMode === "demo"
+                        ? "Demo (no API key)"
+                        : "Deterministic (OCR + rules, no AI)"}
                     </span>
                   </div>
                   <button

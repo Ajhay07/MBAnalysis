@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     OPENAI_VISION_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
+    # Explicit opt-in only. The standard analysis path is the deterministic (non-AI) provider
+    # regardless of which API keys happen to be set - see app.providers.get_provider. Set to
+    # "gemini" or "openai" to use that vision provider instead for drawings the deterministic
+    # BOM-table extractor can't read; "demo" forces the labeled placeholder provider.
+    AI_PROVIDER: str = ""
     DATABASE_URL: str = "sqlite:///./mbanalysis.db"
     MAX_UPLOAD_MB: int = 25
     ALLOWED_EXTENSIONS: str = ".pdf,.png,.jpg,.jpeg,.tif,.tiff"
@@ -59,11 +64,18 @@ class Settings(BaseSettings):
 
     @property
     def ai_mode(self) -> str:
-        # Gemini takes precedence over OpenAI when both keys happen to be set (realistically
-        # only one will ever be configured in a given environment) - see app/providers/__init__.py.
-        if self.GEMINI_API_KEY:
+        # Mirrors app.providers.get_provider's own precedence: the standard path is the
+        # deterministic (non-AI) provider unless AI_PROVIDER explicitly opts into gemini/
+        # openai/demo. Kept in sync deliberately rather than importing get_provider here
+        # (this is a cheap, dependency-free string check used by health/dashboard endpoints).
+        requested = (self.AI_PROVIDER or "").strip().lower()
+        if requested == "gemini" and self.GEMINI_API_KEY:
             return "gemini"
-        return "openai" if self.OPENAI_API_KEY else "demo"
+        if requested == "openai" and self.OPENAI_API_KEY:
+            return "openai"
+        if requested == "demo":
+            return "demo"
+        return "deterministic"
 
 
 @lru_cache

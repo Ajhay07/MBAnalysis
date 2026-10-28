@@ -347,7 +347,7 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   me: () => request<CurrentUser>("/api/auth/me"),
   dashboardMetrics: () => request<DashboardMetrics>("/api/dashboard/metrics"),
-  aiStatus: () => request<{ mode: string; vision_model: string }>("/api/dashboard/ai-status"),
+  aiStatus: () => request<{ mode: string; vision_model: string | null }>("/api/dashboard/ai-status"),
 
   listDrawings: (params?: { q?: string; status?: string; page?: number; page_size?: number }) => {
     const sp = new URLSearchParams();

@@ -492,7 +492,7 @@ export default function DrawingViewerPage() {
                 {!activeAnalysis && (
                   <div className="border border-dashed border-border rounded-industrial p-6 text-sm text-steel text-center">
                     No analysis yet. Click &quot;Run Analysis&quot; to extract the title block, dimensions, and
-                    component candidates ({drawing.is_demo ? "demo data" : "using configured AI provider"}).
+                    component candidates ({drawing.is_demo ? "demo data" : "deterministic OCR + rules by default; see provider on the result"}).
                   </div>
                 )}
 
