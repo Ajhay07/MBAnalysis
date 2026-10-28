@@ -139,3 +139,45 @@ def test_rows_above_the_header_are_found_too_not_just_below():
     assert descriptions == {"Sleeve", "Bellows"}
     assert all(row.qty == "2" for row in table.rows)
     assert not any("BILL OF MATERIAL" in row.description for row in table.rows)
+
+
+def test_transposed_table_items_as_columns_not_rows():
+    # Regression: a second real MB Metallic Bellows layout (work order 9374, page 1) has no
+    # header ROW at all - instead "DESCRIPTION" and "MATERIAL" are each their own label,
+    # stacked vertically in a narrow left strip, and every component is its own COLUMN to the
+    # right (item name under DESCRIPTION's y-band, material under MATERIAL's y-band, both at
+    # the same x-position per component). The row-based search above correctly finds nothing
+    # here (there is no single header row to find), so this must fall back to the transposed
+    # reader rather than silently returning zero components. Coordinates are a simplified
+    # stand-in for the real drawing's title block, with an unrelated spec-parameters block
+    # (its own "MATERIAL No." field included) sharing the same row band to confirm it doesn't
+    # get pulled in by mistake.
+    # Items packed tightly (a few px apart, same as the real drawing) so the contiguous-run
+    # gap check doesn't itself cut the run short - only the deliberate 200px+ gap before the
+    # unrelated spec-parameters block should trigger that cutoff.
+    desc_y = 1800
+    mat_y = 2000
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("END PIPE", 445, desc_y, w=25, h=85),
+        _region("COLLAR", 477, desc_y, w=25, h=75),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=120),
+        _region("A 516 Gr.70", 450, mat_y, w=25, h=90),
+        # Unrelated spec-parameters block sharing the desc_y row band, far enough right (a
+        # 200px+ gap past COLLAR) that it must NOT be swept into the item list.
+        _region("QUANTITY", 700, desc_y, w=25, h=90),
+        _region("MATERIAL No.", 1200, desc_y - 85, w=25, h=110),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    assert len(table.rows) == 3
+    descriptions = {row.description for row in table.rows}
+    assert descriptions == {"BELLOWS", "END PIPE", "COLLAR"}
+    by_description = {row.description: row.material for row in table.rows}
+    assert by_description["BELLOWS"] == "A 240 TYP 304"
+    assert by_description["END PIPE"] == "A 516 Gr.70"
+    assert by_description["COLLAR"] == ""
+    assert "QUANTITY" not in descriptions
+    assert "MATERIAL No." not in descriptions

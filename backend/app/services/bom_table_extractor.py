@@ -77,10 +77,136 @@ def _x_span(bbox) -> tuple[float, float]:
     return (min(xs), max(xs)) if xs else (0.0, 0.0)
 
 
+def _y_span(bbox) -> tuple[float, float]:
+    ys = [p[1] for p in bbox]
+    return (min(ys), max(ys)) if ys else (0.0, 0.0)
+
+
+def _y_overlap(bbox_a, bbox_b) -> float:
+    y0a, y1a = _y_span(bbox_a)
+    y0b, y1b = _y_span(bbox_b)
+    return min(y1a, y1b) - max(y0a, y0b)
+
+
+# Pixel gap beyond which two x-sorted regions are no longer treated as the same
+# transposed-table "run" - see _extract_transposed_bom_table below. Real items in one of these
+# title blocks sit 3-30px apart; the gap to an unrelated field (a separate spec-parameters
+# block sharing the same page, say) runs 150px+, so 100 cleanly separates the two without
+# needing to hand-tune per drawing.
+TRANSPOSED_RUN_GAP_PX = 100
+
+
+def _contiguous_x_run(candidates: list, start_x: float) -> list:
+    """candidates sorted by x-position, keeping a contiguous run starting near start_x and
+    cutting at the first gap wider than TRANSPOSED_RUN_GAP_PX. Used to isolate one title-block
+    sub-table's cells from an unrelated block of text sharing the same page/row band."""
+    ordered = sorted(candidates, key=lambda r: _x_center(r.bbox))
+    run: list = []
+    prev_x1 = start_x
+    for region in ordered:
+        x0, x1 = _x_span(region.bbox)
+        if x0 - prev_x1 > TRANSPOSED_RUN_GAP_PX:
+            break
+        run.append(region)
+        prev_x1 = x1
+    return run
+
+
+def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
+    """Fallback for title blocks where the BOM is laid out ROTATED: instead of one header row
+    with an item per row below it, each attribute (DESCRIPTION, MATERIAL, ...) is its own
+    label stacked in a narrow strip, and each COMPONENT is a column of its own to the right -
+    item name, material etc. for one component all share roughly the same x-position across
+    different attribute-label y-bands. This is a real, recurring MB Metallic Bellows title-
+    block style (confirmed directly from a production drawing's raw OCR regions - WO-9374 -
+    where the row-based extract_bom_table above correctly finds nothing, because there never
+    is a single header ROW here to find).
+
+    Deliberately conservative like the row-based path: a component with no readable
+    description is not invented, and a component whose material cell can't be confidently
+    matched is still returned, just with an empty material (never a guessed one).
+    """
+    description_label = next(
+        (r for r in regions if _normalize(r.text or "") in HEADER_TOKENS["description"]),
+        None,
+    )
+    if description_label is None:
+        return None
+    desc_x0, desc_x1 = _x_span(description_label.bbox)
+
+    item_candidates = [
+        r for r in regions
+        if r is not description_label
+        and r.text and r.text.strip()
+        and _y_overlap(r.bbox, description_label.bbox) > 0
+        and _x_center(r.bbox) > desc_x1
+    ]
+    item_regions = _contiguous_x_run(item_candidates, desc_x1)
+    if not item_regions:
+        return None
+
+    # The MATERIAL label for THIS sub-table sits in the same narrow x-strip as DESCRIPTION
+    # (stacked vertically below it) - a page can have other "MATERIAL ..." fields elsewhere
+    # (e.g. "MATERIAL No." in an unrelated spec-parameters block), so pick whichever match is
+    # closest in x to the DESCRIPTION label actually used, not just the first match.
+    material_label_candidates = [
+        r for r in regions
+        if r is not description_label
+        and any(
+            _normalize(r.text or "") == alias or _normalize(r.text or "").startswith(alias)
+            for alias in HEADER_TOKENS["material"]
+        )
+    ]
+    material_by_item: dict[int, str] = {}
+    if material_label_candidates:
+        material_label = min(
+            material_label_candidates,
+            key=lambda r: abs(_x_center(r.bbox) - _x_center(description_label.bbox)),
+        )
+        material_value_candidates = [
+            r for r in regions
+            if r is not material_label
+            and r not in item_regions
+            and r is not description_label
+            and r.text and r.text.strip()
+            and _y_overlap(r.bbox, material_label.bbox) > 0
+            and _x_center(r.bbox) > desc_x1
+        ]
+        material_values = _contiguous_x_run(material_value_candidates, desc_x1)
+        for value_region in material_values:
+            nearest_item = min(item_regions, key=lambda it: abs(_x_center(it.bbox) - _x_center(value_region.bbox)))
+            material_by_item[id(nearest_item)] = value_region.text.strip()
+
+    rows = [
+        BomRow(
+            description=item.text.strip(),
+            material=material_by_item.get(id(item), ""),
+            raw_text=item.text.strip(),
+            confidence=item.confidence,
+        )
+        for item in item_regions
+    ]
+    return BomTableExtraction(header_columns=["description", "material"], rows=rows)
+
+
 def extract_bom_table(regions) -> BomTableExtraction | None:
     """`regions` is a list of app.services.paddle_ocr.OcrRegion (text, confidence, bbox).
     Returns None when no table header can be confidently identified; otherwise the header
-    columns found and every body row successfully assembled beneath them."""
+    columns found and every body row successfully assembled beneath them.
+
+    Tries the normal header-row-plus-item-rows layout first; only falls back to the transposed
+    "items as columns" layout (see _extract_transposed_bom_table's docstring) when NO header
+    could be identified at all. A header that genuinely has zero body rows beneath/above it is
+    a real, deliberately-conservative answer in its own right (same as before this fallback
+    existed) - it must be returned as-is, not treated as "found nothing" and overwritten by a
+    completely different table from the transposed path."""
+    table = _extract_row_based_bom_table(regions)
+    if table is not None:
+        return table
+    return _extract_transposed_bom_table(regions) if regions else None
+
+
+def _extract_row_based_bom_table(regions) -> BomTableExtraction | None:
     if not regions:
         return None
 
