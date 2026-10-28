@@ -123,9 +123,19 @@ def extract_bom_table(regions) -> BomTableExtraction | None:
     # Order columns left-to-right so a body row's cells are matched in natural reading order.
     ordered_columns = sorted(columns.items(), key=lambda kv: kv[1][0])
 
+    # Body rows can sit either below OR above the header - don't assume one direction. Many
+    # real title-block BOM tables (e.g. MB Metallic Bellows' own drawings) are built bottom-up:
+    # the header row and the "BILL OF MATERIAL" caption sit at the BOTTOM of the table, with
+    # item 1 directly above the header and the highest item number at the top. A one-directional
+    # search (data must be below the header) silently finds zero rows on every such drawing -
+    # this was traced directly to a real 0-component result on a genuine MB drawing.
+    # A bare "BILL OF MATERIAL(S)" caption sitting right next to the header (common in exactly
+    # this bottom-up layout) is not a row - exclude it explicitly rather than let it become a
+    # junk single-cell component.
     body_regions = [
         r for r in regions
-        if header_y + 5 < _y_center(r.bbox) <= header_y + BODY_SEARCH_BAND_PX
+        if 5 < abs(_y_center(r.bbox) - header_y) <= BODY_SEARCH_BAND_PX
+        and _normalize(r.text or "") not in ("BILL OF MATERIAL", "BILL OF MATERIALS")
     ]
     if not body_regions:
         return BomTableExtraction(header_columns=[c for c, _ in ordered_columns], rows=[])

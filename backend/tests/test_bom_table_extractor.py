@@ -103,3 +103,39 @@ def test_header_only_with_no_body_rows_returns_empty_row_list():
     table = extract_bom_table(header_only)
     assert table is not None
     assert table.rows == []
+
+
+def test_rows_above_the_header_are_found_too_not_just_below():
+    # Regression: a real MB Metallic Bellows drawing (work order 9374) builds its BOM table
+    # bottom-up - the header row ("NO  DESCRIPTION  MATERIAL  QTY") and the "BILL OF MATERIAL"
+    # caption sit at the BOTTOM of the table, with item 1 directly above the header and item 2
+    # (and further items) stacked above that. A search that only looked below the header found
+    # zero rows on this exact layout and silently produced a 0-component analysis. Mirrors the
+    # real row order: item 2 above item 1, header below both, caption beside the header.
+    header_y = 300
+    regions = [
+        # Row 2 (topmost).
+        _region("Sleeve", 10, 100),
+        _region("A 240 Gr. 304", 150, 100),
+        _region("2", 340, 100, w=20),
+        # Row 1 (just above the header).
+        _region("Bellows", 10, 200),
+        _region("A 240 TYP 304", 150, 200),
+        _region("2", 340, 200, w=20),
+        # Header row at the bottom (the real drawing's header literally reads bare "NO", not
+        # "ITEM NO." - it doesn't match any item_no alias, same as on the real drawing, but
+        # DESCRIPTION/MATERIAL/QTY alone already clear MIN_DISTINCT_HEADER_TOKENS).
+        _region("DESCRIPTION", 10, header_y),
+        _region("NO", 600, header_y, w=20),
+        _region("MATERIAL", 150, header_y),
+        _region("QTY", 340, header_y, w=20),
+        # The table's title caption, right next to the header - must not become a row.
+        _region("BILL OF MATERIAL", 10, header_y + 15),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    assert len(table.rows) == 2
+    descriptions = {row.description for row in table.rows}
+    assert descriptions == {"Sleeve", "Bellows"}
+    assert all(row.qty == "2" for row in table.rows)
+    assert not any("BILL OF MATERIAL" in row.description for row in table.rows)
