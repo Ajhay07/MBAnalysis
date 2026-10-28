@@ -51,36 +51,36 @@ app.include_router(indents.router)
 
 @app.on_event("startup")
 def _log_ocr_availability() -> None:
-    # OCR is the only source of BOM-table evidence for DeterministicProvider (see
-    # app/services/paddle_ocr.py / app/providers/deterministic_provider.py) - if PaddleOCR
-    # can't import or its engine can't construct on this host, every real analysis silently
-    # comes back with zero components. That used to be invisible until a user actually hit
-    # "Re-run Analysis" and opened OCR Evidence. Checking it once at boot, with the real
-    # import/construction exception already logged (see paddle_ocr.py), means the cause is in
-    # `railway logs` immediately after "Application startup complete" rather than buried in a
-    # per-request error string. This also warms the engine (several seconds of model loading)
-    # before the first real user request instead of during it.
-    from app.services.paddle_ocr import is_paddleocr_available
-    available = is_paddleocr_available()
-    if available:
-        logger.info("PaddleOCR engine ready - OCR-based BOM extraction is available.")
+    # Deliberately a cheap, import-only check - NOT is_paddleocr_available(), which
+    # constructs the real PaddleOCR engine (downloads/loads model weights over the network,
+    # can take a while on first run). An earlier version of this hook called that eagerly at
+    # boot and it was the wrong call: it made the container slow to become healthy during a
+    # redeploy, and Railway killing a slow-starting container mid-construction is exactly what
+    # produced a PaddlePaddle C++ "FatalError: Termination signal is detected" trace in the
+    # logs (that's PaddlePaddle's own SIGTERM handler, not evidence of a real crash - but a
+    # real side effect of starting the engine eagerly here). The engine stays lazy, built on
+    # the first real OCR request as originally designed; this only logs whether the import
+    # itself succeeded, which needs no network call and can't block startup.
+    from app.services.paddle_ocr import PaddleOCR
+    if PaddleOCR is not None:
+        logger.info("PaddleOCR import OK - OCR engine will be constructed on first real use.")
     else:
         logger.error(
-            "PaddleOCR is NOT available on this server - every analysis will come back with "
-            "zero components (see the import/construction error logged just above, if any, "
-            "or app/services/paddle_ocr.py's own error string in /api/drawings/{id}/pages/"
-            "{n}/ocr)."
+            "PaddleOCR could NOT be imported on this server - every analysis will come back "
+            "with zero components (see the import exception logged just above, if any)."
         )
 
 
 @app.get("/api/health")
 def health():
-    from app.services.paddle_ocr import is_paddleocr_available
+    # Also import-only (see the startup hook above for why): never triggers the slow,
+    # network-dependent engine construction from a health-check request.
+    from app.services.paddle_ocr import PaddleOCR
     return {
         "status": "ok",
         "ai_mode": settings.ai_mode,
-        # Surfaced directly in health since this is the single most common reason a real
-        # drawing comes back with zero components - no need to dig through logs or OCR
-        # Evidence to find out whether OCR is even available on this deployment.
-        "ocr_available": is_paddleocr_available(),
+        # True only means the paddleocr package imported - it does not guarantee the engine
+        # will construct successfully too (that happens lazily on first real OCR request, and
+        # can still fail independently; see app/services/paddle_ocr.py's own logging for that).
+        "paddleocr_importable": PaddleOCR is not None,
     }
