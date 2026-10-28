@@ -44,12 +44,7 @@ def get_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_
 
 @router.get("/ai-status")
 def ai_status(current_user: User = Depends(get_current_user)):
+    # No generative AI model is used by this app (see app.providers.get_provider) -
+    # vision_model is always None; kept as a field for frontend/API-shape stability.
     settings = get_settings()
-    if settings.ai_mode == "gemini":
-        vision_model = settings.GEMINI_MODEL
-    elif settings.ai_mode == "openai":
-        vision_model = settings.OPENAI_VISION_MODEL
-    else:
-        # deterministic/demo modes call no vision model at all.
-        vision_model = None
-    return {"mode": settings.ai_mode, "vision_model": vision_model}
+    return {"mode": settings.ai_mode, "vision_model": None}

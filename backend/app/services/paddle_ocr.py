@@ -1,10 +1,11 @@
 """PaddleOCR adapter: local, free, no-API-key text extraction.
 
-This is a DISTINCT processing stage from AI vision interpretation (OpenAI provider / demo
-provider). OCR only extracts raw text + bounding boxes from pixels; it never invents
-components, quantities, or dimensions - that interpretation is the provider's job. A drawing
-can be "OCR completed" with zero AI-identified components if no AI provider is configured
-(JobStage.OCR vs JobStage.VISION_ANALYSIS already encodes this distinction).
+This is a DISTINCT processing stage from the deterministic interpretation that follows it
+(app.providers.deterministic_provider / demo provider). OCR only extracts raw text + bounding
+boxes from pixels; it never invents components, quantities, or dimensions - that interpretation
+is the provider's job. A drawing can be "OCR completed" with zero components if no printed BOM
+table is found (JobStage.OCR vs JobStage.VISION_ANALYSIS - a stage-name holdover from this
+pipeline's history - already encodes this distinction).
 
 The PaddleOCR engine is expensive to construct (loads detection/recognition/classification
 models) so it is created ONCE as a module-level singleton and reused across every page/request,

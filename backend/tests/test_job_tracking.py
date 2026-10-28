@@ -12,7 +12,7 @@ import pytest
 
 from app.config import get_settings
 from app.models.models import Drawing, DrawingStatus, Job, JobStage, UserRole
-from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
+from app.providers.base import ProviderAuthError, ProviderTransientError
 from app.services.analysis_pipeline import run_analysis
 
 

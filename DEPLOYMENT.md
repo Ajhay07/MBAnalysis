@@ -61,16 +61,7 @@ isn't mounted yet during build): `alembic upgrade head`, then `python create_adm
 | `MAX_UPLOAD_MB` | `25` |
 | `ALLOWED_EXTENSIONS` | `.pdf,.png,.jpg,.jpeg,.tif,.tiff` |
 | `OCR_ENABLED` / `OCR_LANGUAGE` / `OCR_USE_GPU` / `PDF_RENDER_DPI` / `OCR_CONFIDENCE_THRESHOLD` / `OCR_PREPROCESS_DESKEW` / `OCR_PREPROCESS_CLAHE` / `OCR_PREPROCESS_DENOISE` | Same defaults as `backend/.env.example` |
-| `OPENAI_API_KEY` | **Left unset.** App runs in demo mode (`ai_mode: "demo"` from `/api/health`) — no OpenAI calls, no cost. |
-
-### Adding a real OpenAI key later
-
-```
-cd backend
-railway variables --set "OPENAI_API_KEY=sk-..."
-```
-This triggers an automatic redeploy; `ai_mode` will switch to `"openai"` on `/api/health` once
-it's back online.
+| `AI_PROVIDER` | **Left unset.** No generative AI model is used anywhere in this app - `DeterministicProvider` (OCR + rule-based parsing, no API key) runs by default and `ai_mode` reports `"deterministic"` from `/api/health`. Set to `demo` only to force the seeded-showcase `DemoProvider` for testing; any other value, or a stray `GEMINI_API_KEY`/`OPENAI_API_KEY` left over from an older deploy, is silently ignored. |
 
 ### Rotating `JWT_SECRET` / admin password
 

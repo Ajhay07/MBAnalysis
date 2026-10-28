@@ -5,14 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    OPENAI_API_KEY: str = ""
-    OPENAI_VISION_MODEL: str = "gpt-4o-mini"
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    # Explicit opt-in only. The standard analysis path is the deterministic (non-AI) provider
-    # regardless of which API keys happen to be set - see app.providers.get_provider. Set to
-    # "gemini" or "openai" to use that vision provider instead for drawings the deterministic
-    # BOM-table extractor can't read; "demo" forces the labeled placeholder provider.
+    # No generative AI model is used anywhere in this app - see app.providers.get_provider.
+    # AI_PROVIDER exists only to force the seeded-showcase DemoProvider (set to "demo") for
+    # local testing; any other value (including unset) uses the real deterministic pipeline.
     AI_PROVIDER: str = ""
     DATABASE_URL: str = "sqlite:///./mbanalysis.db"
     MAX_UPLOAD_MB: int = 25
@@ -41,10 +36,8 @@ class Settings(BaseSettings):
     OCR_ENABLED: bool = True
     OCR_LANGUAGE: str = "en"
     OCR_USE_GPU: bool = False
-    # Lower DPI means a smaller image payload sent to the AI vision provider, which reduces
-    # Gemini's own server-side processing time per request and makes a 504 DEADLINE_EXCEEDED
-    # (Google's own deadline expiring, not ours) less likely under load. 200 DPI is still well
-    # above what's needed for OCR/vision legibility on engineering drawings.
+    # DPI used when rasterizing PDF pages for OCR/preview. 200 is well above what's needed for
+    # text legibility on engineering drawings while keeping page images/processing time small.
     PDF_RENDER_DPI: int = 200
     OCR_CONFIDENCE_THRESHOLD: float = 0.5
     # Deskew defaults off: the minAreaRect-based angle estimate is unreliable on sparse/
@@ -64,16 +57,10 @@ class Settings(BaseSettings):
 
     @property
     def ai_mode(self) -> str:
-        # Mirrors app.providers.get_provider's own precedence: the standard path is the
-        # deterministic (non-AI) provider unless AI_PROVIDER explicitly opts into gemini/
-        # openai/demo. Kept in sync deliberately rather than importing get_provider here
-        # (this is a cheap, dependency-free string check used by health/dashboard endpoints).
-        requested = (self.AI_PROVIDER or "").strip().lower()
-        if requested == "gemini" and self.GEMINI_API_KEY:
-            return "gemini"
-        if requested == "openai" and self.OPENAI_API_KEY:
-            return "openai"
-        if requested == "demo":
+        # Mirrors app.providers.get_provider's own precedence (kept in sync deliberately rather
+        # than importing get_provider here - this is a cheap, dependency-free string check used
+        # by the health/dashboard endpoints). No generative AI model is used by default.
+        if (self.AI_PROVIDER or "").strip().lower() == "demo":
             return "demo"
         return "deterministic"
 

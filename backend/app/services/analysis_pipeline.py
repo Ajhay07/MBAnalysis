@@ -23,7 +23,7 @@ from app.models.models import (
     ReferenceBomTable,
 )
 from app.providers import get_provider
-from app.providers.openai_provider import ProviderAuthError, ProviderTransientError
+from app.providers.base import ProviderAuthError, ProviderTransientError
 from app.schemas.analysis import AnalysisResult
 from app.services.catalog_matching import match_catalog_component
 from app.services.classification import classify_component
@@ -196,9 +196,10 @@ def _persist_reference_bom_tables(db: Session, analysis: Analysis, page_ocr_by_p
 
 
 def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_count: int = 0) -> Analysis:
-    """Full pipeline: OCR -> AI provider (OpenAI vision or demo) -> persist versioned analysis
-    with components. Never substitutes seeded demo content for a real drawing - the provider
-    is invoked fresh against this drawing's own file every time.
+    """Full pipeline: OCR -> provider (deterministic rule-based parsing, or demo for the seeded
+    showcase project) -> persist versioned analysis with components. Never substitutes seeded
+    demo content for a real drawing - the provider is invoked fresh against this drawing's own
+    file every time.
 
     Multi-page PDFs are rasterized page by page (embedded text is also extracted per page) and
     each page is fed through OCR + the provider independently, with every resulting component's

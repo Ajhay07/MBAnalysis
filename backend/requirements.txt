@@ -5,13 +5,8 @@ alembic==1.13.3
 pydantic==2.9.2
 pydantic-settings==2.5.2
 python-multipart==0.0.9
-openai==1.51.0
-# Official Google Gen AI Python SDK (current supported package; the older
-# google-generativeai package is deprecated in favor of this one). Pinned to the latest 1.x
-# release (1.75.0) rather than the newer 2.x series: 2.x requires pydantic>=2.12.5, which would
-# force bumping this project's pinned pydantic==2.9.2 across the whole app; 1.75.0 only requires
-# pydantic>=2.9.0,<3.0.0 and installs cleanly against the existing pin.
-google-genai==1.75.0
+# No generative AI SDK (openai/google-genai) - this app has no AI-vision dependency; see
+# app/providers/deterministic_provider.py and app/providers/get_provider().
 # OCR: PaddleOCR (local, free, CPU, no API key) replaces the earlier pytesseract adapter.
 # paddleocr==2.7.3 is pinned deliberately over newer 2.9.x/3.x releases: 2.9.x's bundled
 # formula/table-recognition augmentation path (ppocr.data.imaug.latex_ocr_aug) unconditionally
@@ -31,7 +26,7 @@ Pillow==10.4.0
 pandas==2.2.3
 openpyxl==3.1.5
 pytest==8.3.3
-# Bumped from 0.27.2 to satisfy google-genai==1.75.0's httpx>=0.28.1 requirement.
+# Required by starlette's TestClient (used throughout tests/), not by any AI SDK.
 httpx==0.28.1
 numpy==1.26.4
 # Pure-pip PDF rendering/text extraction - no external binary (e.g. poppler) required.

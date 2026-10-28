@@ -2,19 +2,17 @@ from __future__ import annotations
 
 """Deterministic, non-generative drawing analysis: title block, dimensions, materials and BOM
 components are extracted with regex/rule-based parsing over OCR text and OCR region geometry
-(app.services.bom_table_extractor), never by calling a generative AI model. This is the
-STANDARD analysis provider now (see app.providers.get_provider) - Gemini/OpenAI remain available
-as an optional, explicitly-opted-into interpretation layer for drawings this pipeline can't
-confidently parse (e.g. no printed BOM table), but ordinary indent-sheet generation does not
-require them, a missing/exhausted AI key, and a provider outage does not block it.
+(app.services.bom_table_extractor), never by calling a generative AI model. This is the ONLY
+real analysis path (see app.providers.get_provider) - there is no AI vision provider anywhere
+in this app, optional or otherwise, and no API key of any kind is needed.
 
 Conservative by construction: every field this provider reports is grounded in the OCR text in
 front of it (title_block/dimensions/materials) or structured OCR region geometry (components
-only when bom_table_extractor finds a confident header+row match). It never counts holes/
-features from the image (that needs real vision), so repeated_features is always empty here -
-only the optional vision providers populate it. Anything it can't ground is reported in
-missing_info/ambiguities instead of being guessed, matching ComponentCandidate's own
-source_text/is_assumption evidence requirement.
+only when bom_table_extractor finds a confident header+row match). It never counts holes or
+features from the raw image (that would need real computer vision beyond what OpenCV's simple
+rule-based preprocessing does here), so repeated_features is always empty. Anything it can't
+ground is reported in missing_info/ambiguities instead of being guessed, matching
+ComponentCandidate's own source_text/is_assumption evidence requirement.
 """
 
 import re

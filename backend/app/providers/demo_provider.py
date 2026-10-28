@@ -9,8 +9,9 @@ from app.schemas.analysis import (
 
 class DemoProvider(DrawingAnalysisProvider):
     """Returns realistic, clearly-labeled precomputed analysis results.
-    Used whenever OPENAI_API_KEY is not configured, or explicitly for demo projects.
-    Never used for a real uploaded drawing's persisted analysis path (see services.analysis_pipeline)."""
+    Used only for the seeded showcase project (set AI_PROVIDER=demo) - DeterministicProvider is
+    the real no-key default (see app.providers.get_provider). Never used for a real uploaded
+    drawing's persisted analysis path (see services.analysis_pipeline)."""
 
     name = "demo"
 

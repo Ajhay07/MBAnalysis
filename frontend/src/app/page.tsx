@@ -130,11 +130,7 @@ export default function DashboardPage() {
                   <div className="px-4 py-2 text-xs text-steel border-b border-border">
                     Extraction mode:{" "}
                     <span className={aiMode === "demo" ? "text-accent-dark font-medium" : "text-emerald-700 font-medium"}>
-                      {aiMode === "gemini"
-                        ? "Gemini Vision"
-                        : aiMode === "openai"
-                        ? "OpenAI Vision"
-                        : aiMode === "demo"
+                      {aiMode === "demo"
                         ? "Demo (no API key)"
                         : "Deterministic (OCR + rules, no AI)"}
                     </span>

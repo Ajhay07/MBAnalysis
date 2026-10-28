@@ -1,12 +1,15 @@
 # Engineering Drawing Intelligence & BOM System
 
-AI-assisted engineering drawing analysis and BOM generation. Upload a drawing, run analysis
-(real OpenAI vision model, or built-in demo mode with no API key), review extracted components,
-generate a versioned BOM, classify Buy/Make/Review, and export CSV/Excel reports.
+Engineering drawing analysis and BOM generation with no generative AI dependency. Upload a
+drawing, run analysis (deterministic: PyMuPDF native text + PaddleOCR regions + rule-based
+parsing - no API key, no network call to an AI vendor), review extracted components, generate
+a versioned BOM, classify Buy/Make/Review, generate an indent sheet, and export CSV/Excel/PDF.
 
-**This has not been validated against real engineering drawings.** It was built and tested
-against synthetic demo drawings only. Before trusting it on production drawings, validate the
-AI provider's output accuracy against a sample of your own real drawings.
+**This has not been validated against real engineering drawings at scale.** Validate the
+deterministic extractor's output accuracy against a sample of your own real drawings before
+trusting it in production - in particular, it only recognizes a printed ITEM/QTY/PART NO/
+DESCRIPTION-style BOM table; a drawing without one will correctly come back with zero
+components rather than a fabricated BOM, and needs manual review.
 
 ## Architecture
 
@@ -15,7 +18,8 @@ AI provider's output accuracy against a sample of your own real drawings.
   app/
     models/        SQLAlchemy ORM models (Drawing, Analysis, Component, Bom, BomLineItem, ...)
     schemas/        Pydantic request/response + AI result schemas
-    providers/      DrawingAnalysisProvider interface: OpenAIVisionProvider, DemoProvider
+    providers/      DrawingAnalysisProvider interface: DeterministicProvider (the real path),
+                    DemoProvider (seeded showcase project only)
     services/       calculations, OCR/preprocessing, classification, BOM generation, exports,
                     file validation/security, the analysis pipeline
     routers/        FastAPI route modules (auth, drawings, analyses, boms, procurement,
@@ -38,32 +42,39 @@ AI provider's output accuracy against a sample of your own real drawings.
   src/components/     Sidebar, status/make-buy/demo badges
 ```
 
-### AI provider adapter pattern
+### Provider adapter pattern (no generative AI model)
 `app/providers/base.py` defines `DrawingAnalysisProvider` (abstract). Two implementations:
-- `OpenAIVisionProvider` — real vision-model call via the official `openai` SDK. Used only when
-  `OPENAI_API_KEY` is set. Model name is configurable via `OPENAI_VISION_MODEL`.
+- `DeterministicProvider` (`app/providers/deterministic_provider.py`) — the real path, used for
+  every real upload. No API key, no network call to an AI vendor, no generative model. Parses
+  the title block/dimensions/materials with regex over the OCR text the pipeline already
+  assembles, and extracts BOM components via `app/services/bom_table_extractor.py`, which locates
+  a printed ITEM/QTY/PART NO/DESCRIPTION-style header row in the PaddleOCR regions and assigns
+  body-row text to columns by position. Never fabricates a component: when no BOM table can be
+  confidently located, it reports an ambiguity and leaves components empty for human review.
 - `DemoProvider` — returns clearly-labeled (`[DEMO]`) precomputed results, no network call, no
-  key required. Used automatically whenever `OPENAI_API_KEY` is absent, or if the OpenAI
-  provider fails to initialize, so the app never crashes for lack of a key.
+  key required. Used only for the seeded showcase project (set `AI_PROVIDER=demo` to force it).
 
-`app/providers/__init__.py: get_provider()` is the single place that decides which one to use.
+`app/providers/__init__.py: get_provider()` is the single place that decides which one to use -
+deterministic unless `AI_PROVIDER=demo`.
 
-### OCR vs. AI Vision Interpretation — these are two distinct stages
+### OCR vs. deterministic interpretation — two distinct stages
 
-**OCR text extraction** (`app/services/paddle_ocr.py`) and **AI visual interpretation**
-(`app/providers/*`) are deliberately separate concerns, never conflated:
+**OCR text extraction** (`app/services/paddle_ocr.py`) and **deterministic interpretation**
+(`app/providers/deterministic_provider.py`, `app/services/bom_table_extractor.py`) are
+deliberately separate concerns, never conflated:
 
-| | OCR (this phase) | AI vision interpretation |
+| | OCR (this phase) | Deterministic interpretation |
 |---|---|---|
-| What it does | Extracts raw text + bounding boxes from pixels | Identifies components, quantities, dimensions, materials |
-| Engine | PaddleOCR — local, CPU, free | OpenAI vision model, or the Demo provider |
-| Needs an API key? | **No, never** | Only `OpenAIVisionProvider`; Demo provider needs none |
-| Job stage | `JobStage.OCR` | `JobStage.VISION_ANALYSIS` |
-| Can succeed alone? | Yes — a drawing can reach "OCR completed" with **zero** AI-identified components if no AI provider is configured | No — it consumes OCR's text as additional context, but invents nothing not actually read |
+| What it does | Extracts raw text + bounding boxes from pixels | Parses that text/geometry into title block, dimensions, materials, and BOM components |
+| Engine | PaddleOCR — local, CPU, free | Regex + rule-based parsing, no API key, no network call |
+| Needs an API key? | No, never | No, never |
+| Job stage | `JobStage.OCR` | `JobStage.VISION_ANALYSIS` (name kept for schema/history continuity; no vision model actually runs) |
+| Can succeed alone? | Yes — a drawing can reach "OCR completed" with **zero** components if no printed BOM table is found | No — it consumes OCR's text/regions as its only input |
 
-A drawing never gets fabricated components/dimensions from the OCR layer — OCR only ever
-produces text + confidence + bounding boxes; interpreting that into BOM line items is entirely
-the provider's job (real OpenAI vision call, or clearly-labeled `[DEMO]` synthetic data).
+A drawing never gets fabricated components/dimensions - OCR only ever produces text +
+confidence + bounding boxes, and the deterministic provider only ever reports a component it
+can point to a real BOM-table row for (or clearly-labeled `[DEMO]` synthetic data, for the demo
+project only).
 
 **OCR engine: PaddleOCR** (`app/services/paddle_ocr.py`)
 - Pinned to `paddleocr==2.7.3` + `paddlepaddle==2.6.2` (CPU-only, no GPU package). Newer
@@ -127,14 +138,14 @@ What *is* fully modeled now (previously a known gap): each `Job` carries `stage`
 `queued`, `extracting_pages`, `ocr`, `vision_analysis`, `persisting`, `needs_review`, `reviewed`,
 `bom_generated`, `failed`, `cancelled`), `retry_count`, `failure_reason`/`last_error`,
 `started_at`/`completed_at`, and a link to the `Analysis` it produced. The pipeline
-(`app/services/analysis_pipeline.py`) advances `stage` as it moves through OCR and vision
-analysis and always reaches a terminal stage — on any failure (corrupt/encrypted/empty PDF, AI
-provider auth error, AI provider timeout/rate-limit/connection/server error after a bounded
-retry+backoff, malformed/schema-invalid AI JSON, or any other unhandled exception) the Drawing
-and Job are marked `Failed` with a specific reason, never left stuck in "Processing" and never
-silently marked successful. `OpenAIVisionProvider` distinguishes auth errors (fail fast, no
-retry) from transient errors (bounded retry with exponential backoff) — see
-`app/providers/openai_provider.py`.
+(`app/services/analysis_pipeline.py`) advances `stage` as it moves through OCR and the
+deterministic interpretation stage (`vision_analysis` is a stage-name holdover from the pipeline's
+history; no vision model runs) and always reaches a terminal stage — on any failure
+(corrupt/encrypted/empty PDF, or any other unhandled exception) the Drawing and Job are marked
+`Failed` with a specific reason, never left stuck in "Processing" and never silently marked
+successful. `ProviderAuthError`/`ProviderTransientError` (`app/providers/base.py`) remain as the
+two failure categories the pipeline distinguishes, for any provider that needs them - the
+deterministic provider has no API key to fail, so in practice it never raises either.
 
 `POST /api/drawings/{id}/reprocess` retries a drawing: it increments `retry_count` and always
 re-invokes the real pipeline against the drawing's own file — it never falls back to
@@ -229,15 +240,13 @@ Demo data never leaks into a real upload: uploading your own drawing always crea
 drawing's own file — it never substitutes seeded content. See
 `backend/tests/test_demo_isolation.py` for the automated check.
 
-## What needs `OPENAI_API_KEY` vs. what doesn't
+## No API key needed, ever
 
-| Needs a key | Works without a key |
-|---|---|
-| Real AI-driven extraction of title block/dimensions/components from an uploaded drawing (`OpenAIVisionProvider`) | Everything else: dashboard, drawing library, upload/delete/reprocess, demo projects, BOM generation/editing/export, procurement view, calculation engine, review queue, audit trail |
-
-Without a key, any "Run Analysis" on a real upload falls back to `DemoProvider`'s generic
-placeholder result (clearly labeled, low confidence, routed to the review queue) instead of
-fabricating realistic-looking data.
+Nothing in this app needs an API key. Extraction of title block/dimensions/components from an
+uploaded drawing runs through `DeterministicProvider` (PyMuPDF text + PaddleOCR regions +
+rule-based parsing) — the same default for every real upload, with no key, no vendor account,
+and no network call to set up. `AI_PROVIDER=demo` is the only override, and it only forces the
+seeded-showcase `DemoProvider` (clearly-labeled placeholder data, used for the demo project).
 
 ## Authentication Setup
 
@@ -327,11 +336,11 @@ every uploaded PDF with `pymupdf` (`fitz`) — a **pure-pip** dependency with no
 required (no poppler, no system install) — and, per page:
 - extracts the embedded text layer via `page.get_text()`,
 - rasterizes the page at ~210-290 DPI (`fitz.Matrix(3.0, 3.0)`, well above the library default
-  of 72 DPI) and runs the existing OpenCV/Tesseract OCR preprocessing on that raster, same as
+  of 72 DPI) and runs it through PaddleOCR (`app/services/paddle_ocr.py`), same as
   the PNG/JPG path, so scanned pages with no text layer still get OCR'd correctly,
-- feeds the page through the configured provider (OpenAI vision or `DemoProvider`)
-  independently, stamping every resulting component's `source_page` with that page's true
-  physical page number,
+- feeds the page through the configured provider (`DeterministicProvider` by default, or
+  `DemoProvider` for the seeded showcase project) independently, stamping every resulting
+  component's `source_page` with that page's true physical page number,
 - saves one PNG preview per page next to the original upload, served at
   `GET /api/drawings/{id}/pages/{page_number}/preview`, so the frontend can page through a
   multi-page PDF exactly as it looked in the original file.

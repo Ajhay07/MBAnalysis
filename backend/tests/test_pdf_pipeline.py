@@ -71,8 +71,8 @@ def test_three_page_pdf_produces_per_page_components_with_correct_page_numbers(d
     assert drawing.status in (DrawingStatus.NEEDS_REVIEW, DrawingStatus.REVIEWED)
     assert analysis.page_count == 3
     pages_seen = sorted({c.source_page for c in analysis.components})
-    # DemoProvider (no OPENAI_API_KEY in test env) returns exactly one component per call, and
-    # the pipeline calls it once per page, so we should see one component per page number.
+    # DemoProvider (selected explicitly above) returns exactly one component per call, and the
+    # pipeline calls it once per page, so we should see one component per page number.
     assert pages_seen == [1, 2, 3]
 
     # Each page's rasterized preview must be stored on disk for the frontend pager.

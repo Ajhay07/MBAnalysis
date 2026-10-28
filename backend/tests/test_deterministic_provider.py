@@ -42,8 +42,8 @@ SAMPLE_OCR_TEXT = (
 
 
 def test_operates_with_no_api_key_at_all(monkeypatch):
-    """Core requirement: missing/absent Gemini or OpenAI credentials never block this
-    provider - it has no API key setting whatsoever."""
+    """Core requirement: this is the only real provider in the app, and it has no API key
+    setting whatsoever - nothing can be missing/absent to block it."""
     provider = DeterministicProvider()
     result = provider.analyze(image_path="does-not-exist.png", ocr_text="", drawing_number="X-1")
     assert result.provider == "deterministic"
