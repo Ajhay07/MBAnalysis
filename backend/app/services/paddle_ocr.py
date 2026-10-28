@@ -14,9 +14,13 @@ fully offline with no network calls and no paid API.
 """
 from __future__ import annotations
 
+import logging
+import traceback
 from dataclasses import dataclass, field
 
 import numpy as np
+
+logger = logging.getLogger("app.services.paddle_ocr")
 
 try:
     import cv2
@@ -25,8 +29,19 @@ except Exception:  # pragma: no cover
 
 try:
     from paddleocr import PaddleOCR
-except Exception:  # pragma: no cover - optional dependency may not be installed
+except Exception as exc:  # pragma: no cover - optional dependency may not be installed
     PaddleOCR = None
+    # This used to be swallowed completely with no log line at all, which is exactly why a
+    # real "PaddleOCR not installed" report in production (the deterministic provider's only
+    # OCR source) had no accompanying stack trace anywhere - `railway logs` showed nothing
+    # pointing at paddleocr, even though every page OCR call was silently failing. Logging the
+    # real import exception here means it now shows up in server logs at startup, not just as
+    # a generic per-request error string.
+    logger.error(
+        "PaddleOCR import failed at startup - OCR (and therefore all real BOM-table "
+        "extraction) will be unavailable until this is fixed: %s\n%s",
+        exc, traceback.format_exc(),
+    )
 
 from app.config import get_settings
 
@@ -89,9 +104,14 @@ def _get_engine():
             use_gpu=settings.OCR_USE_GPU,
             show_log=False,
         )
-    except Exception:
+    except Exception as exc:
         _engine_init_failed = True
         _engine = None
+        logger.error(
+            "PaddleOCR engine construction failed (module imported fine, but instantiating "
+            "it - which downloads/loads model weights - did not): %s\n%s",
+            exc, traceback.format_exc(),
+        )
     return _engine
 
 
