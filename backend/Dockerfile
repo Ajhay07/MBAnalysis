@@ -40,10 +40,25 @@ COPY requirements.txt .
 # Install everything except paddleocr first (pip ignores the paddleocr line only if we
 # strip it out), then install paddleocr with --no-deps, then its real runtime deps,
 # exactly as documented in requirements.txt / README.
+#
+# paddleocr is installed with --no-deps specifically to avoid its install_requires dragging
+# in a second, conflicting opencv-python build (see the big comment above) - but that means
+# its OWN real runtime deps (beyond opencv/numpy) never get installed either, and paddleocr's
+# code imports several of them unconditionally at module-import time (e.g.
+# ppocr/utils/network.py does `from tqdm import tqdm` at the top of the file, which is reached
+# just by `from paddleocr import PaddleOCR` - this surfaced as "ModuleNotFoundError: No module
+# named 'tqdm'" the first time this image actually built successfully past the numpy/imgaug
+# issue above). These are hand-installed below instead, deliberately excluding
+# opencv-contrib-python (would reinstall yet another conflicting cv2 build on top of
+# opencv-python-headless - the exact problem --no-deps exists to avoid) and cython/visualdl
+# (large, build-time-only or training-visualization-only, not needed to import or run
+# inference). If a future paddleocr/imgaug version needs something else at import time, the
+# self-check below will fail loudly with exactly which module is missing.
 RUN grep -v '^paddleocr==' requirements.txt > /tmp/requirements.base.txt \
     && pip install --no-cache-dir -r /tmp/requirements.base.txt \
     && pip install --no-cache-dir --no-deps paddleocr==2.7.3 \
     && pip install --no-cache-dir pyclipper imgaug lmdb requests \
+        tqdm attrdict beautifulsoup4 lxml rapidfuzz fire premailer python-docx pdf2docx \
     && python -c "\
 import numpy as np; \
 np.sctypes = np.sctypes if hasattr(np, 'sctypes') else {'int': [np.int8, np.int16, np.int32, np.int64], 'uint': [np.uint8, np.uint16, np.uint32, np.uint64], 'float': [np.float16, np.float32, np.float64], 'complex': [np.complex64, np.complex128], 'others': [bool, object, bytes, str, np.void]}; \
