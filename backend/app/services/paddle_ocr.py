@@ -22,6 +22,30 @@ import numpy as np
 
 logger = logging.getLogger("app.services.paddle_ocr")
 
+# Compatibility shim, applied before anything imports paddleocr/imgaug.
+#
+# NumPy 2.0 removed `np.sctypes` outright. imgaug (a transitive runtime dependency pulled in
+# by paddleocr for its data-augmentation pipeline - see backend/Dockerfile) still calls
+# `np.sctypes["float"]` directly at import time in imgaug/imgaug.py, and imgaug has not been
+# updated for NumPy 2.0. We used to fight pip's resolver to keep the whole environment pinned
+# below NumPy 2.0, but that pin cannot hold without --no-deps on imgaug too: modern
+# scikit-image/opencv-python releases (imgaug's own unpinned transitive deps) now REQUIRE
+# NumPy >= 2.0 themselves, so pip's resolver upgrades numpy regardless, and forcibly
+# downgrading it back afterward (`pip install --force-reinstall numpy==1.26.4` once those
+# heavy C-extension packages are already unpacked) crashed the Docker build outright with a
+# native "free(): invalid pointer" / PaddlePaddle SIGABRT - a much worse failure than the one
+# it was trying to fix. The robust fix is to let numpy resolve to whatever pip naturally
+# picks (2.x) and polyfill the one attribute imgaug actually needs, matching NumPy 1.x's own
+# definition exactly. This is the documented community workaround for this exact breakage.
+if not hasattr(np, "sctypes"):
+    np.sctypes = {  # type: ignore[attr-defined]
+        "int": [np.int8, np.int16, np.int32, np.int64],
+        "uint": [np.uint8, np.uint16, np.uint32, np.uint64],
+        "float": [np.float16, np.float32, np.float64],
+        "complex": [np.complex64, np.complex128],
+        "others": [bool, object, bytes, str, np.void],
+    }
+
 try:
     import cv2
 except Exception:  # pragma: no cover
