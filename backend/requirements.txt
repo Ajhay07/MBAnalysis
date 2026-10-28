@@ -28,6 +28,11 @@ openpyxl==3.1.5
 pytest==8.3.3
 # Required by starlette's TestClient (used throughout tests/), not by any AI SDK.
 httpx==0.28.1
+# Pinned below NumPy 2.0 deliberately: PaddleOCR's own transitive dependency (imgaug) calls
+# `np.sctypes`, an attribute NumPy 2.0 removed outright. This pin alone is NOT enough in
+# Docker - backend/Dockerfile's imgaug install step has no --no-deps, so pip's resolver can
+# silently upgrade this past 1.26.4 to satisfy some other unpinned transitive requirement;
+# the Dockerfile re-pins numpy explicitly right after and build-fails loudly if it can't hold.
 numpy==1.26.4
 # Pure-pip PDF rendering/text extraction - no external binary (e.g. poppler) required.
 pymupdf==1.28.2
