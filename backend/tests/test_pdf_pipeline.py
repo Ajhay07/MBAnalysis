@@ -50,7 +50,16 @@ def _reportlab_pdf_bytes(num_pages: int, text_per_page: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def test_three_page_pdf_produces_per_page_components_with_correct_page_numbers(db):
+def test_three_page_pdf_produces_per_page_components_with_correct_page_numbers(db, monkeypatch):
+    # DemoProvider selected explicitly: it's no longer the implicit no-key default (see
+    # app.providers.get_provider), and this test specifically wants "one component per page"
+    # behavior, which the real DeterministicProvider default correctly would NOT produce here
+    # (these reportlab pages have no printed BOM table or recognizable dimension callout - it
+    # would legitimately persist zero components on all 3 pages, same as the page_count fix
+    # above already proved pages are still genuinely processed either way).
+    from app.providers.demo_provider import DemoProvider
+    monkeypatch.setattr("app.services.analysis_pipeline.get_provider", lambda: DemoProvider())
+
     settings = get_settings()
     pdf_bytes = _reportlab_pdf_bytes(3, ["Page One Title Block", "Page Two Detail", "Page Three Notes"])
     stored_name = "multi_page_test.pdf"
