@@ -11,6 +11,35 @@ import ReferenceBomPanel from "@/components/ReferenceBomPanel";
 import PageLayout, { AsideSection, AsideItem } from "@/components/PageLayout";
 import { FileText } from "lucide-react";
 
+// Mirrors backend/app/services/indent_service.py:format_size_text - same key order/labels, so
+// the SIZE shown here matches what ends up on the generated indent sheet. "" (not "n/a") when
+// there's nothing extracted yet, so it's visually distinct from a genuinely empty-but-checked
+// dimensions dict.
+const SIZE_KEY_ORDER = ["od", "id", "thk", "l", "length", "width", "height", "dia", "pcd", "hole_dia", "noh", "size"];
+const SIZE_KEY_LABELS: Record<string, string> = {
+  od: "OD", id: "ID", thk: "Thk", l: "L", length: "L", width: "W", height: "H",
+  dia: "Dia", pcd: "PCD", hole_dia: "Hole Ø", noh: "No. of Holes", size: "",
+};
+function formatSizeText(dimensions: Record<string, unknown> | null | undefined): string {
+  if (!dimensions) return "";
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const key of SIZE_KEY_ORDER) {
+    const value = dimensions[key];
+    if (value !== undefined && value !== null && value !== "") {
+      const label = SIZE_KEY_LABELS[key] ?? key;
+      parts.push(label ? `${label} ${value}` : String(value));
+      seen.add(key);
+    }
+  }
+  for (const [key, value] of Object.entries(dimensions)) {
+    if (!seen.has(key) && key.startsWith("dim_") && value !== undefined && value !== null && value !== "") {
+      parts.push(String(value));
+    }
+  }
+  return parts.join("  ");
+}
+
 function OcrOverlay({
   evidence,
   selected,
@@ -554,6 +583,11 @@ export default function DrawingViewerPage() {
                               </div>
                             </div>
                             <div className="text-sm">{c.description}</div>
+                            {formatSizeText(c.dimensions) && (
+                              <div className="text-xs text-ink font-medium mt-0.5">
+                                Size: {formatSizeText(c.dimensions)}
+                              </div>
+                            )}
                             <div className="text-xs text-steel mt-0.5">
                               {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
                               {pageCount > 1 && (
@@ -613,6 +647,7 @@ export default function DrawingViewerPage() {
                       <tr>
                         <th className="th !px-2">Part</th>
                         <th className="th !px-2">Description</th>
+                        <th className="th !px-2">Size</th>
                         <th className="th !px-2 text-right">Qty</th>
                         <th className="th !px-2">Make/Buy</th>
                         <th className="th !px-2">Catalog</th>
@@ -625,6 +660,9 @@ export default function DrawingViewerPage() {
                           <tr key={c.id}>
                             <td className="td !px-2 font-medium whitespace-nowrap">{c.part_number || "—"}</td>
                             <td className="td !px-2 text-steel">{c.description}</td>
+                            <td className="td !px-2 text-steel">
+                              {formatSizeText(c.dimensions) || <span className="text-steel-light">not extracted</span>}
+                            </td>
                             <td className="td !px-2 text-right">{c.quantity}</td>
                             <td className="td !px-2"><MakeBuyBadge value={c.make_buy} /></td>
                             <td className="td !px-2">
