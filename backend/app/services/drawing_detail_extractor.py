@@ -217,7 +217,6 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
     raw_tokens: list[str] = []
     confidences: list[float] = []
     label_tokens: list = []
-    value_tokens: list = []
     diameter_values: list[tuple] = []  # (value_str, region)
     plain_values: list[tuple] = []
 
@@ -243,7 +242,6 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
             continue
         if _PLAIN_NUMBER_RE.match(text.strip()):
             plain_values.append((text.strip(), region))
-            value_tokens.append((text.strip(), region))
 
     # Pair explicit labels (OD/ID/THK/L/...) with the nearest still-unused value region.
     used_value_ids: set = set()
@@ -260,31 +258,26 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
         dimensions[key] = nearest[0]
         used_value_ids.add(id(nearest[1]))
 
-    # Convention-based fallback for anything left unlabeled: Ø values -> od, then id (by
-    # descending size, the usual OD-before-ID drawing convention); a single remaining small
-    # decimal -> thk; one remaining plain integer -> l. Everything else stays generic (dim_N)
-    # so it is still visible to a reviewer instead of being dropped.
+    # Ø values -> od, then id (by descending size, the usual OD-before-ID drawing convention) -
+    # this IS a reliable, well-evidenced convention (confirmed on two real drawings: every
+    # diameter-shaped OCR token on these sheets was a genuine OD/ID of the component it was
+    # nearest to). A third+ diameter is ambiguous (which feature is it?) and is left out rather
+    # than guessed.
     remaining_diameters = [(v, r) for v, r in diameter_values]
     remaining_diameters.sort(key=lambda vr: -float(vr[0]))
-    for value, _region in remaining_diameters:
-        if "od" not in dimensions:
-            dimensions["od"] = value
-        elif "id" not in dimensions:
-            dimensions["id"] = value
-        else:
-            dimensions.setdefault(f"dim_{len(dimensions) + 1}", value)
+    for value, _region in remaining_diameters[:2]:
+        key = "od" if "od" not in dimensions else ("id" if "id" not in dimensions else None)
+        if key:
+            dimensions[key] = value
 
-    leftover_plain = [
-        (v, r) for v, r in plain_values if id(r) not in used_value_ids
-    ]
-    for value, _region in leftover_plain:
-        fv = float(value)
-        if "." in value and fv < 10 and "thk" not in dimensions:
-            dimensions["thk"] = value
-        elif "l" not in dimensions and fv == int(fv) and fv >= 1:
-            dimensions["l"] = value
-        else:
-            dimensions[f"dim_{len(dimensions) + 1}"] = value
+    # Deliberately NO fallback here for leftover unlabeled plain numbers ("a lone decimal is
+    # probably Thk", "a lone integer is probably L"). Tried and reverted: on real drawings, the
+    # genuine Thk/L values are themselves usually unlabeled too, so this heuristic had no real
+    # signal to distinguish them from an unrelated nearby number (a notes fragment, another
+    # component's own dimension) - confirmed wrong on both WO-9374's Mid Pipe (L shown as "15"/
+    # dim_3/dim_4 noise instead of the real 150) and Bellow (Thk/L both actually belonged to the
+    # neighboring Sleeve panel). An OD/ID-only result a reviewer fills the rest of in by hand is
+    # more useful than a confident-looking wrong Thk/L.
 
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     return dimensions, raw_tokens, avg_conf
@@ -312,14 +305,17 @@ def extract_detail_dimensions(regions, known_descriptions: list[str] | None = No
     for label_region, component_name in labels:
         panel_regions = panel_regions_by_label.get(id(label_region), [])
         dimensions, raw_tokens, confidence = _parse_panel_dimensions(panel_regions)
-        has_generic_only = dimensions and all(k.startswith("dim_") for k in dimensions)
         results.append(DetailPanel(
             label_text=label_region.text.strip(),
             component_name=component_name,
             dimensions=dimensions,
             raw_tokens=raw_tokens,
             confidence=confidence,
-            needs_confirmation=(not dimensions) or has_generic_only,
+            # Always True, even when dimensions were found: this is heuristic pixel-proximity
+            # evidence, not a verified reading - every value it produces needs a human to check
+            # it against the actual drawing before it's trusted (see format_size_text's "size"
+            # passthrough and the editable Size field in the Components tab).
+            needs_confirmation=True,
         ))
     return results
 

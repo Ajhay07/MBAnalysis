@@ -582,9 +582,17 @@ export default function DrawingViewerPage() {
                                 <span className="text-xs text-steel-light">{(c.confidence * 100).toFixed(0)}%</span>
                               </div>
                             </div>
-                            <div className="text-sm">{c.description}</div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-xs text-steel">Size:</span>
+                            <input
+                              type="text"
+                              className="input !w-full !py-0.5 !px-1.5 !text-sm !font-normal"
+                              defaultValue={c.description}
+                              onBlur={(e) => {
+                                const text = e.target.value.trim();
+                                if (text && text !== c.description) updateComponent(c, { description: text });
+                              }}
+                            />
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-xs text-steel w-9 shrink-0">Size:</span>
                               <input
                                 type="text"
                                 className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
@@ -598,8 +606,21 @@ export default function DrawingViewerPage() {
                                 }}
                               />
                             </div>
-                            <div className="text-xs text-steel mt-0.5">
-                              {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-xs text-steel w-9 shrink-0">Material:</span>
+                              <input
+                                type="text"
+                                className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
+                                placeholder="material n/a"
+                                defaultValue={c.material}
+                                onBlur={(e) => {
+                                  const text = e.target.value.trim();
+                                  if (text !== c.material) updateComponent(c, { material: text });
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-steel mt-1">
+                              {c.category} &middot; Qty {c.quantity}
                               {pageCount > 1 && (
                                 <>
                                   {" "}&middot;{" "}
@@ -657,6 +678,7 @@ export default function DrawingViewerPage() {
                       <tr>
                         <th className="th !px-2">Part</th>
                         <th className="th !px-2">Description</th>
+                        <th className="th !px-2">Material</th>
                         <th className="th !px-2">Size</th>
                         <th className="th !px-2 text-right">Qty</th>
                         <th className="th !px-2">Make/Buy</th>
@@ -669,7 +691,29 @@ export default function DrawingViewerPage() {
                         return (
                           <tr key={c.id}>
                             <td className="td !px-2 font-medium whitespace-nowrap">{c.part_number || "—"}</td>
-                            <td className="td !px-2 text-steel">{c.description}</td>
+                            <td className="td !px-2 text-steel">
+                              <input
+                                type="text"
+                                className="input !w-36 !py-0.5 !px-1.5 !text-xs"
+                                defaultValue={c.description}
+                                onBlur={(e) => {
+                                  const text = e.target.value.trim();
+                                  if (text && text !== c.description) updateComponent(c, { description: text });
+                                }}
+                              />
+                            </td>
+                            <td className="td !px-2 text-steel">
+                              <input
+                                type="text"
+                                className="input !w-32 !py-0.5 !px-1.5 !text-xs"
+                                placeholder="material n/a"
+                                defaultValue={c.material}
+                                onBlur={(e) => {
+                                  const text = e.target.value.trim();
+                                  if (text !== c.material) updateComponent(c, { material: text });
+                                }}
+                              />
+                            </td>
                             <td className="td !px-2 text-steel">
                               <input
                                 type="text"

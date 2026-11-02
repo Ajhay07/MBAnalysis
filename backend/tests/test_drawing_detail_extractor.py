@@ -34,7 +34,9 @@ def test_extracts_od_id_thk_l_from_sleeve_panel():
     assert sleeve.dimensions["id"] == "509"
     assert sleeve.dimensions["thk"] == "1.5"
     assert sleeve.dimensions["l"] == "150"
-    assert sleeve.needs_confirmation is False
+    # Always True regardless of how much was found - this is heuristic pixel-proximity
+    # evidence, never treated as a verified reading without a human checking it.
+    assert sleeve.needs_confirmation is True
 
 
 def test_bare_detail_letter_callout_is_not_a_component_panel():
@@ -58,12 +60,23 @@ def test_unlabeled_diameter_values_fall_back_to_od_then_id():
     regions = [
         _r("END PIPE DETAIL", 100, 100),
         _r("Ø559", 120, 140),
-        _r("125", 120, 170),
     ]
     panels = extract_detail_dimensions(regions)
     end_pipe = next(p for p in panels if p.component_name == "END PIPE")
     assert end_pipe.dimensions["od"] == "559"
-    assert end_pipe.dimensions["l"] == "125"
+
+
+def test_unlabeled_plain_number_is_never_guessed_as_thk_or_l():
+    # Regression: a bare, unlabeled number near a panel used to be guessed as Thk (small
+    # decimal) or L (plain integer) by convention. Reverted - on real drawings the genuine
+    # Thk/L values are themselves usually unlabeled too, so this had no real signal to tell a
+    # true Thk/L apart from an unrelated nearby number (confirmed wrong on WO-9374's Mid Pipe
+    # and Bellow panels). Only OD/ID (from an unambiguous Ø-prefixed token) and explicitly
+    # labeled values (an adjacent "L"/"THK" text region, or inline "L150") are ever reported.
+    regions = [_r("END PIPE DETAIL", 100, 100), _r("Ø559", 120, 140), _r("125", 120, 170)]
+    panels = extract_detail_dimensions(regions)
+    end_pipe = next(p for p in panels if p.component_name == "END PIPE")
+    assert end_pipe.dimensions == {"od": "559"}
 
 
 def test_panel_with_no_nearby_numbers_is_flagged_for_confirmation():
@@ -108,11 +121,11 @@ def test_other_bom_component_names_and_header_words_never_leak_into_a_panel():
         _r("DESCRIPTION", 110, 130),
         _r("LIMIT ROD", 110, 150),
         _r("1. SUITABLE SHIPPING BARS WILL BE PROVIDED, PAINTED IN YELLOW", 110, 170),
-        _r("219", 110, 190),
+        _r("Ø219", 110, 190),
     ]
     panels = extract_detail_dimensions(regions, known_descriptions=["Limit Rod", "Sleeve"])
     sleeve = panels[0]
-    assert sleeve.dimensions == {"l": "219"}
+    assert sleeve.dimensions == {"od": "219"}
     assert "DESCRIPTION" not in sleeve.raw_tokens
     assert "LIMIT ROD" not in sleeve.raw_tokens
     assert not any("SHIPPING BARS" in t for t in sleeve.raw_tokens)
