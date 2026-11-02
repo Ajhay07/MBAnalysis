@@ -210,40 +210,60 @@ def _extract_row_based_bom_table(regions) -> BomTableExtraction | None:
     if not regions:
         return None
 
-    hits: dict[str, object] = {}
+    # Collect EVERY header-token hit (region, category), not just the first match per
+    # category - a single early false positive (e.g. a drawing's own "QUANTITY"/"SIZE (OD)"/
+    # "ITEM CODE" design-spec fields, which share a category's alias text but sit nowhere near
+    # a real table) must never permanently claim that category and block the genuine header
+    # cell for it found elsewhere on the page. Matching is exact-text-only (no substring
+    # prefix) for the same reason: a prefix match is what let "ITEM CODE" claim "item_no" (via
+    # the generic alias "ITEM") and "SIZE (OD)" claim "size" (via the bare alias "SIZE") on a
+    # real production drawing (WO-9347) - printed table header cells are themselves normally
+    # the bare word, so this loses no legitimate matches.
+    all_hits: list[tuple[str, object]] = []
     for region in regions:
         norm = _normalize(region.text or "")
         if not norm:
             continue
         for category, aliases in HEADER_TOKENS.items():
-            if category in hits:
-                continue
-            if any(norm == alias or norm.startswith(alias) for alias in aliases):
-                hits[category] = region
+            if norm in aliases:
+                all_hits.append((category, region))
+                break  # a region claims at most one category
 
-    if len(hits) < MIN_DISTINCT_HEADER_TOKENS:
+    if len(all_hits) < MIN_DISTINCT_HEADER_TOKENS:
         return None
 
+    # Best spatial cluster: the tightest y-band (<= HEADER_ROW_BAND_PX) covering the most
+    # distinct categories, searched across ALL hits rather than one fixed guess per category.
+    sorted_hits = sorted(all_hits, key=lambda h: _y_center(h[1].bbox))
+    best_cluster: list[tuple[str, object]] = []
+    for i in range(len(sorted_hits)):
+        base_y = _y_center(sorted_hits[i][1].bbox)
+        cluster: list[tuple[str, object]] = []
+        seen_categories: set[str] = set()
+        for j in range(i, len(sorted_hits)):
+            if _y_center(sorted_hits[j][1].bbox) - base_y > HEADER_ROW_BAND_PX:
+                break
+            cat, region = sorted_hits[j]
+            if cat not in seen_categories:
+                cluster.append((cat, region))
+                seen_categories.add(cat)
+        if len(cluster) > len(best_cluster):
+            best_cluster = cluster
+
+    if len(best_cluster) < MIN_DISTINCT_HEADER_TOKENS:
+        return None
+    # A genuine printed BOM table always carries some kind of item-identifying column
+    # (DESCRIPTION and/or PART NO); a cluster built only from QTY/SIZE/ITEM-NO-style fields
+    # (exactly the failure mode above) is accepted nowhere else on this page as a real table -
+    # treat it as "no table found" so the transposed-layout fallback (extract_bom_table) gets
+    # its turn instead of this returning a confident-looking but empty/junk result.
+    cluster_categories = {cat for cat, _ in best_cluster}
+    if "description" not in cluster_categories and "part_no" not in cluster_categories:
+        return None
+
+    hits = dict(best_cluster)
     header_regions = list(hits.values())
     y_centers = [_y_center(r.bbox) for r in header_regions]
-    if max(y_centers) - min(y_centers) > HEADER_ROW_BAND_PX:
-        # Same "tightest cluster" fallback as reference_bom_service.detect_reference_bom_table.
-        sorted_hits = sorted(hits.items(), key=lambda kv: _y_center(kv[1].bbox))
-        best_cluster: list = []
-        for i in range(len(sorted_hits)):
-            cluster = [sorted_hits[i]]
-            base_y = _y_center(sorted_hits[i][1].bbox)
-            for j in range(i + 1, len(sorted_hits)):
-                if _y_center(sorted_hits[j][1].bbox) - base_y <= HEADER_ROW_BAND_PX:
-                    cluster.append(sorted_hits[j])
-            if len(cluster) > len(best_cluster):
-                best_cluster = cluster
-        if len(best_cluster) < MIN_DISTINCT_HEADER_TOKENS:
-            return None
-        hits = dict(best_cluster)
-        header_regions = list(hits.values())
-        y_centers = [_y_center(r.bbox) for r in header_regions]
-
     header_y = sum(y_centers) / len(y_centers)
     columns = {cat: _x_span(region.bbox) for cat, region in hits.items()}
     # Order columns left-to-right so a body row's cells are matched in natural reading order.

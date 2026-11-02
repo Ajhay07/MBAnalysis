@@ -141,6 +141,41 @@ def test_rows_above_the_header_are_found_too_not_just_below():
     assert not any("BILL OF MATERIAL" in row.description for row in table.rows)
 
 
+def test_spec_block_near_misses_do_not_mask_the_real_table():
+    # Regression: a real production drawing (WO-9347) has a design-spec parameters block
+    # ("QUANTITY", "ITEM CODE", "SIZE (OD)") whose cells happen to cluster within
+    # HEADER_ROW_BAND_PX of each other and - before this fix - were treated as a confident
+    # 3-column BOM header purely because "QUANTITY" is a legitimate qty alias while "ITEM
+    # CODE" and "SIZE (OD)" matched via overly-loose prefix matching on "ITEM"/"SIZE". That
+    # produced a non-None but garbage table (zero usable rows) and starved the real table
+    # (laid out as a transposed DESCRIPTION/MATERIAL block, same style as test_transposed_
+    # table_items_as_columns_not_rows) of ever being tried. Exact-token matching plus
+    # requiring a description/part_no column in the winning cluster must reject the spec
+    # block and fall through to the transposed reader instead.
+    spec_block = [
+        _region("QUANTITY", 1176, 1585, w=70),
+        _region("ITEM CODE", 1448, 1586, w=70),
+        _region("SIZE (OD)", 1410, 1591, w=70),
+    ]
+    desc_y, mat_y = 1659, 1952
+    real_table = [
+        _region("DESCRIPTION", 411, desc_y, w=60),
+        _region("BELLOW", 453, desc_y, w=50),
+        _region("END PIPE", 497, desc_y, w=50),
+        _region("SLEEVE", 583, desc_y, w=50),
+        _region("MATERIAL", 416, mat_y, w=60),
+        _region("A 240 TYP 304", 450, mat_y, w=50),
+        _region("IS 2062 E250 BR", 502, mat_y, w=50),
+        _region("IS 3589 / A 106 Gr.B", 583, mat_y, w=50),
+    ]
+    table = extract_bom_table(spec_block + real_table)
+    assert table is not None
+    assert len(table.rows) == 3
+    descriptions = {row.description for row in table.rows}
+    assert descriptions == {"BELLOW", "END PIPE", "SLEEVE"}
+    assert not any("QUANTITY" in row.description or "ITEM CODE" in row.description for row in table.rows)
+
+
 def test_transposed_table_items_as_columns_not_rows():
     # Regression: a second real MB Metallic Bellows layout (work order 9374, page 1) has no
     # header ROW at all - instead "DESCRIPTION" and "MATERIAL" are each their own label,
