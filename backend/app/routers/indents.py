@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_role
 from app.database import get_db
-from app.models.models import AuditLog, Bom, Indent, IndentRule, IndentStatus, User
+from app.models.models import Analysis, AuditLog, Bom, Indent, IndentRule, IndentStatus, User
 from app.schemas.api import IndentGenerateRequest, IndentOut, IndentRuleIn, IndentRuleOut
 from app.services.indent_pdf import indent_to_pdf_bytes
 from app.services.indent_service import generate_indent
@@ -21,13 +21,33 @@ def create_indent(bom_id: str, payload: IndentGenerateRequest, db: Session = Dep
     bom = db.query(Bom).get(bom_id)
     if not bom:
         raise HTTPException(404, "BOM not found")
+
+    assembly_quantity = payload.assembly_quantity
+    required_on = payload.required_on
+    if assembly_quantity is None or not required_on:
+        analysis = db.query(Analysis).get(bom.analysis_id)
+        title_block = (analysis.title_block or {}) if analysis else {}
+        if assembly_quantity is None:
+            assembly_quantity = title_block.get("drawing_quantity")
+        if not required_on and title_block.get("nb_size_mm"):
+            nb = title_block["nb_size_mm"]
+            nb_text = str(int(nb)) if float(nb).is_integer() else str(nb)
+            required_on = f"{nb_text} NB"
+
+    if assembly_quantity is None:
+        raise HTTPException(
+            422,
+            "assembly_quantity was not supplied and could not be read from the drawing's own "
+            "QUANTITY title-block field - provide it explicitly.",
+        )
+
     try:
         indent = generate_indent(
             db, bom,
-            assembly_quantity=payload.assembly_quantity,
+            assembly_quantity=assembly_quantity,
             wo_number=payload.wo_number,
             party_name=payload.party_name,
-            required_on=payload.required_on,
+            required_on=required_on,
             serial_no=payload.serial_no,
             indent_date=payload.indent_date,
             rule_ids=payload.rule_ids,

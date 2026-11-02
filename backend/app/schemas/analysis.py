@@ -46,6 +46,13 @@ class TitleBlock(BaseModel):
     units: str = "mm"
     scale: str = ""
     material_spec: str = ""
+    # Read from the title block's own "QUANTITY" / "SIZE ( NB )" fields (see
+    # app.providers.deterministic_provider._parse_drawing_quantity_and_nb) - how many
+    # assemblies this drawing covers and its nominal bore, when printed on the drawing. Feeds
+    # the indent generator's assembly_quantity/required_on defaults so a new drawing's indent
+    # doesn't need those retyped by hand; still overridable per generation.
+    drawing_quantity: float | None = None
+    nb_size_mm: float | None = None
 
 
 class DimensionFinding(BaseModel):

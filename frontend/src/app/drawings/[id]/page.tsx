@@ -737,6 +737,14 @@ export default function DrawingViewerPage() {
                 disabled={busy}
                 onClick={() => {
                   setTab("bom");
+                  const tb = (activeAnalysis?.title_block ?? {}) as Record<string, unknown>;
+                  const drawingQty = tb.drawing_quantity;
+                  const nbSize = tb.nb_size_mm;
+                  setIndentForm((f) => ({
+                    ...f,
+                    assembly_quantity: f.assembly_quantity || (drawingQty != null ? String(drawingQty) : ""),
+                    required_on: f.required_on || (nbSize != null ? `${nbSize} NB` : ""),
+                  }));
                   setShowIndentForm(true);
                 }}
               >

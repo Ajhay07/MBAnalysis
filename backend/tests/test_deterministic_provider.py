@@ -62,6 +62,39 @@ def test_title_block_and_materials_parsed_from_ocr_text(monkeypatch):
     assert "SS 316L" in result.materials or any("SS" in m for m in result.materials)
 
 
+def test_drawing_quantity_and_nb_size_parsed_from_title_block(monkeypatch):
+    """Real MB Metallic Bellows title blocks print "QUANTITY" and "SIZE ( NB )" as a label
+    line followed by its value a couple of lines below (see WO-9374-family drawings), not on
+    the same line - this is what feeds the indent generator's auto-filled defaults."""
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)
+    ocr_text = (
+        "DESIGN TEMPERATURE\n"
+        "65°C\n"
+        "QUANTITY\n"
+        "08 Nos.\n"
+        "MATERIAL CODE\n"
+        "101000070101\n"
+        "SIZE ( NB )\n"
+        "400 mm\n"
+        "AXIAL MOVEMENT\n"
+        "5 mm\n"
+    )
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text=ocr_text, drawing_number="DWG-2")
+    assert result.title_block.drawing_quantity == 8.0
+    assert result.title_block.nb_size_mm == 400.0
+
+
+def test_missing_quantity_and_nb_fields_stay_none_not_guessed(monkeypatch):
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text=SAMPLE_OCR_TEXT, drawing_number="DWG-3")
+    assert result.title_block.drawing_quantity is None
+    assert result.title_block.nb_size_mm is None
+
+
 def test_dimension_patterns_extracted_from_text(monkeypatch):
     monkeypatch.setattr(
         "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)

@@ -208,6 +208,44 @@ def test_viewer_cannot_generate_indent(db, client):
     assert resp.status_code == 403
 
 
+def test_create_indent_endpoint_defaults_assembly_quantity_from_drawing_title_block(db, client):
+    """A drawing's own "QUANTITY"/"SIZE ( NB )" title-block fields (parsed by
+    app.providers.deterministic_provider) should be usable to auto-fill the indent request when
+    the caller doesn't supply assembly_quantity/required_on - this is the "calculate the indent
+    straight from the CAD drawing" path, not just the plain qty-per-assembly multiplication."""
+    drawing, bom = _make_9347_bom(db)
+    analysis = db.query(Analysis).get(bom.analysis_id)
+    analysis.title_block = {**(analysis.title_block or {}), "drawing_quantity": 16, "nb_size_mm": 200}
+    db.add(analysis)
+    db.commit()
+
+    user = _editor(db)
+    from app.security import create_access_token
+    token = create_access_token(user.id, user.role.value)
+    resp = client.post(
+        f"/api/boms/{bom.id}/indents",
+        json={"wo_number": "9347"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["assembly_quantity"] == 16
+    assert body["required_on"] == "200 NB"
+
+
+def test_create_indent_endpoint_422s_when_no_quantity_anywhere(db, client):
+    drawing, bom = _make_9347_bom(db)
+    user = _editor(db)
+    from app.security import create_access_token
+    token = create_access_token(user.id, user.role.value)
+    resp = client.post(
+        f"/api/boms/{bom.id}/indents",
+        json={"wo_number": "9347"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
+
+
 def test_assembly_quantity_must_be_positive(db):
     drawing, bom = _make_9347_bom(db)
     user = _editor(db)

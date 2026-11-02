@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover
 from app.providers.base import DrawingAnalysisProvider
 from app.schemas.analysis import AnalysisResult, Ambiguity, ComponentCandidate, DimensionFinding, TitleBlock
 from app.services.bom_table_extractor import extract_bom_table
+from app.services.drawing_detail_extractor import extract_detail_dimensions, match_panel_to_description
 from app.services.paddle_ocr import run_page_ocr
 
 # --- Title block field patterns -------------------------------------------------------------
@@ -54,6 +55,45 @@ _MATERIAL_KEYWORDS = [
 ]
 
 
+# "QUANTITY" / "SIZE ( NB )" labels sit on their own line, with the value 1-3 lines below
+# (see the real title-block text dump for WO-9374-family drawings: "QUANTITY\n08 Nos.\n...").
+# Line-local regexes (like _REV_RE etc. above) can't see across that line break, so this is a
+# small forward-scan instead: find the label line, then take the first following line that
+# itself looks like a bare value for that field.
+_QUANTITY_LABEL_RE = re.compile(r"^QUANTITY\b", re.IGNORECASE)
+_QUANTITY_VALUE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*NOS\.?", re.IGNORECASE)
+_NB_LABEL_RE = re.compile(r"^SIZE\s*\(\s*NB\s*\)", re.IGNORECASE)
+_NB_VALUE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*MM\b", re.IGNORECASE)
+_LABEL_SCAN_AHEAD = 3  # how many following lines to check for the value
+
+
+def _scan_label_value(lines: list[str], label_re: "re.Pattern", value_re: "re.Pattern") -> float | None:
+    for i, line in enumerate(lines):
+        if not label_re.search(line.strip()):
+            continue
+        # The value is sometimes on the same line as the label, sometimes on one of the next
+        # _LABEL_SCAN_AHEAD lines (title blocks lay these out as stacked label/value cells).
+        for candidate in [line] + lines[i + 1:i + 1 + _LABEL_SCAN_AHEAD]:
+            m = value_re.search(candidate)
+            if m:
+                try:
+                    return float(m.group(1))
+                except ValueError:
+                    return None
+    return None
+
+
+def _parse_drawing_quantity_and_nb(ocr_text: str) -> tuple[float | None, float | None]:
+    """Reads the drawing's own "QUANTITY" (how many assemblies this drawing covers) and
+    "SIZE ( NB )" (nominal bore) title-block fields, when printed. Returns (None, None) for
+    either value it can't confidently find - never guessed, only ever a value actually read
+    next to its own label."""
+    lines = ocr_text.splitlines()
+    quantity = _scan_label_value(lines, _QUANTITY_LABEL_RE, _QUANTITY_VALUE_RE)
+    nb_size = _scan_label_value(lines, _NB_LABEL_RE, _NB_VALUE_RE)
+    return quantity, nb_size
+
+
 def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
     rev = "A"
     material_spec = ""
@@ -79,6 +119,7 @@ def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
                 title = m.group(1).strip().rstrip(",.")
     if _UNITS_IN_RE.search(ocr_text) and not _UNITS_MM_RE.search(ocr_text):
         units = "in"
+    drawing_quantity, nb_size_mm = _parse_drawing_quantity_and_nb(ocr_text)
     return TitleBlock(
         drawing_number=drawing_number or "",
         title=title,
@@ -86,6 +127,8 @@ def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
         units=units,
         scale=scale,
         material_spec=material_spec,
+        drawing_quantity=drawing_quantity,
+        nb_size_mm=nb_size_mm,
     )
 
 
@@ -122,7 +165,13 @@ def _parse_materials(ocr_text: str) -> list[str]:
     return found
 
 
-def _rows_to_components(rows, page_number: int) -> list[ComponentCandidate]:
+def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[ComponentCandidate]:
+    """detail_panels (see app.services.drawing_detail_extractor) supplies SIZE dimensions pulled
+    from the drawing's own "<NAME> DETAIL" panels when the printed BOM table has no SIZE column
+    of its own (the common case for this drawing family). A row's own table-provided `size` text
+    always wins when present; the detail-panel match is only used to fill the gap, and is never
+    treated as fully verified - a match built from generic dim_N keys (or no match at all) keeps
+    the component flagged for review via is_assumption/assumption_text."""
     components: list[ComponentCandidate] = []
     for row in rows:
         description = row.description or row.part_no or row.material
@@ -137,13 +186,33 @@ def _rows_to_components(rows, page_number: int) -> list[ComponentCandidate]:
                 qty_value = float(qty_match.group(0))
             except ValueError:
                 qty_value = None
+
+        dimensions: dict = {"size": row.size} if row.size else {}
+        needs_dimension_confirmation = False
+        panel = match_panel_to_description(description, detail_panels) if detail_panels and not dimensions else None
+        if panel is not None and panel.dimensions:
+            dimensions = dict(panel.dimensions)
+            needs_dimension_confirmation = panel.needs_confirmation
+
+        is_assumption = qty_value is None or needs_dimension_confirmation
+        assumption_parts = []
+        if qty_value is None:
+            assumption_parts.append(
+                "Row found in BOM table but no numeric quantity cell could be read - confirm before use."
+            )
+        if needs_dimension_confirmation:
+            assumption_parts.append(
+                f"SIZE taken from drawing panel '{panel.label_text}' (raw tokens: "
+                f"{', '.join(panel.raw_tokens) or 'none'}) - confirm before use."
+            )
+
         components.append(ComponentCandidate(
             part_number=row.part_no,
             description=description,
             category="",  # left for classify_component() in the pipeline to assign
             quantity=qty_value if qty_value is not None else 1,
             material=row.material,
-            dimensions={"size": row.size} if row.size else {},
+            dimensions=dimensions,
             make_buy="Review",
             confidence=max(0.5, min(0.85, row.confidence)) if row.confidence else 0.6,
             verification_status="Unverified",
@@ -151,11 +220,8 @@ def _rows_to_components(rows, page_number: int) -> list[ComponentCandidate]:
             source_text=row.raw_text[:300],
             quantity_basis="explicit_callout" if qty_value is not None else "assumed",
             component_type="purchased",
-            is_assumption=qty_value is None,
-            assumption_text=(
-                "Row found in BOM table but no numeric quantity cell could be read - "
-                "confirm before use." if qty_value is None else ""
-            ),
+            is_assumption=is_assumption,
+            assumption_text=" ".join(assumption_parts),
         ))
     return components
 
@@ -176,8 +242,9 @@ class DeterministicProvider(DrawingAnalysisProvider):
 
         regions = self._regions_for(image_path)
         table = extract_bom_table(regions) if regions else None
+        detail_panels = extract_detail_dimensions(regions) if regions else []
         if table and table.rows:
-            components = _rows_to_components(table.rows, page_number=1)
+            components = _rows_to_components(table.rows, page_number=1, detail_panels=detail_panels)
             if not components:
                 missing_info.append(
                     "A BOM-table-like header row was found, but no body row could be read "

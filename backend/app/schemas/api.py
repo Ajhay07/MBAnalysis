@@ -290,7 +290,11 @@ class IndentOut(BaseModel):
 
 
 class IndentGenerateRequest(BaseModel):
-    assembly_quantity: float
+    # Optional: when omitted, the router falls back to the drawing's own title-block
+    # "QUANTITY" field (app.providers.deterministic_provider._parse_drawing_quantity_and_nb),
+    # if that was readable. Still always overridable - never silently forced from the drawing
+    # when the caller supplies their own value.
+    assembly_quantity: float | None = None
     wo_number: str = ""
     party_name: str = ""
     required_on: str = ""
