@@ -178,6 +178,27 @@ def preprocess_image(image: np.ndarray) -> np.ndarray:
     return result
 
 
+_RETRY_MAX_SIDE_PX = 2200
+
+
+def _downscale_for_retry(image: np.ndarray) -> tuple[np.ndarray, float]:
+    """Shrinks `image` so its longest side is at most _RETRY_MAX_SIDE_PX, returning the
+    resized image and the scale factor applied (1.0 - already small enough - leaves it
+    untouched). Used only as a fallback after a full-resolution OCR call raises; the caller
+    divides returned bbox coordinates by this factor to keep them in the original image's
+    pixel space."""
+    if cv2 is None:
+        return image, 1.0
+    h, w = image.shape[:2]
+    longest = max(h, w)
+    if longest <= _RETRY_MAX_SIDE_PX:
+        return image, 1.0
+    scale = _RETRY_MAX_SIDE_PX / float(longest)
+    resized = cv2.resize(image, (max(1, int(w * scale)), max(1, int(h * scale))),
+                          interpolation=cv2.INTER_AREA)
+    return resized, scale
+
+
 def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResult:
     """Runs PaddleOCR against a single page image (BGR or grayscale numpy array). Never raises -
     any engine exception, malformed image, or missing dependency is converted into a structured
@@ -205,14 +226,35 @@ def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResul
             ),
         )
 
+    rescale = 1.0  # multiply returned bbox coords by 1/rescale to project back to full-res space
     try:
         processed = preprocess_image(image)
         raw = engine.ocr(processed, cls=True)
     except Exception as exc:
-        return PageOcrResult(page_number=page_number, configured=False, error=str(exc))
+        # PaddlePaddle's CPU (oneDNN/MKL-DNN) inference backend can throw a low-level
+        # "could not execute a primitive" error on an otherwise-valid image - observed in
+        # practice on large rasterized full-sheet drawings (very large or oddly-proportioned
+        # pixel arrays trip a primitive-construction limit inside the detection backbone).
+        # Retried once, downscaled to a safer max dimension and without the angle classifier
+        # (one less model/primitive in the pipeline) - a real fallback, not a silent skip: if
+        # this retry also fails, the original error is still what gets reported, not masked.
+        logger.warning(
+            "PaddleOCR failed on page %s at full resolution (%s); retrying downscaled: %s",
+            page_number, getattr(image, "shape", "?"), exc,
+        )
+        try:
+            downscaled, rescale = _downscale_for_retry(image)
+            raw = engine.ocr(downscaled, cls=False)
+        except Exception:
+            return PageOcrResult(page_number=page_number, configured=False, error=str(exc))
 
     regions: list[OcrRegion] = []
     warnings: list[str] = []
+    if rescale != 1.0:
+        warnings.append(
+            "OCR succeeded only after downscaling this page (full-resolution attempt failed) - "
+            "small/dense text may be less accurate than usual."
+        )
     # PaddleOCR 2.x `.ocr()` returns a list (one entry per input image) of lists of
     # [bbox, (text, confidence)] lines. A page with no detected text yields [None] or [].
     pages = raw or []
@@ -223,8 +265,10 @@ def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResul
         except Exception:
             continue
         confidence = float(confidence)
-        regions.append(OcrRegion(text=text, confidence=confidence,
-                                  bbox=[[float(x), float(y)] for x, y in bbox]))
+        regions.append(OcrRegion(
+            text=text, confidence=confidence,
+            bbox=[[float(x) / rescale, float(y) / rescale] for x, y in bbox],
+        ))
         if confidence < settings.OCR_CONFIDENCE_THRESHOLD:
             warnings.append(f"Low-confidence region ({confidence:.2f}): {text!r}")
 

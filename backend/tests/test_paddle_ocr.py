@@ -91,6 +91,53 @@ def test_run_page_ocr_engine_exception_returns_structured_error(monkeypatch):
     assert "engine blew up" in result.error
 
 
+def test_run_page_ocr_retries_downscaled_after_primitive_failure(monkeypatch):
+    """A oneDNN/MKL-DNN 'could not execute a primitive' style failure on the first (full-res)
+    call must not be the final answer - the adapter retries once on a downscaled image rather
+    than giving up immediately, since this class of failure has been observed on real large
+    rasterized drawing pages that otherwise OCR fine at a smaller size."""
+    calls = []
+
+    class _FlakyEngine:
+        def ocr(self, image, cls=True):
+            calls.append((image.shape, cls))
+            if len(calls) == 1:
+                raise RuntimeError("could not execute a primitive descriptor")
+            return [[
+                [[[10, 10], [100, 10], [100, 30], [10, 30]], ("RECOVERED", 0.9)],
+            ]]
+
+    monkeypatch.setattr(paddle_ocr, "_get_engine", lambda: _FlakyEngine())
+    monkeypatch.setattr(paddle_ocr, "_RETRY_MAX_SIDE_PX", 50)
+    image = np.ones((400, 200, 3), dtype=np.uint8) * 255
+    result = run_page_ocr(image, page_number=1)
+
+    assert len(calls) == 2
+    assert calls[0][0][:2] == (400, 200)  # first attempt at full resolution (preprocessed to grayscale)
+    assert max(calls[1][0][:2]) <= 50  # retry was downscaled
+    assert calls[1][1] is False  # cls disabled on retry
+    assert result.configured is True
+    assert result.regions[0].text == "RECOVERED"
+    # bbox coordinates are projected back to the ORIGINAL (full-res) pixel space, not left in
+    # the downscaled retry's coordinate frame - downstream consumers (bom_table_extractor,
+    # drawing_detail_extractor) assume bboxes match the real page image.
+    assert result.regions[0].bbox[0][0] > 10.0
+    assert any("downscal" in w.lower() for w in result.warnings)
+
+
+def test_run_page_ocr_reports_original_error_when_retry_also_fails(monkeypatch):
+    class _AlwaysBoom:
+        def ocr(self, image, cls=True):
+            raise RuntimeError("could not execute a primitive descriptor")
+
+    monkeypatch.setattr(paddle_ocr, "_get_engine", lambda: _AlwaysBoom())
+    image = np.ones((400, 200, 3), dtype=np.uint8) * 255
+    result = run_page_ocr(image, page_number=1)
+
+    assert result.configured is False
+    assert "could not execute a primitive" in result.error
+
+
 def test_run_page_ocr_malformed_image_does_not_crash(monkeypatch):
     _mock_engine(monkeypatch, [[]])
     result = run_page_ocr(np.array([]), page_number=1)
