@@ -79,6 +79,45 @@ def test_no_detail_labels_returns_empty_list():
     assert extract_detail_dimensions(regions) == []
 
 
+def test_leading_item_number_marker_is_stripped_before_matching():
+    # Regression: a real drawing (3I/26160A) prints "[01] BELLOW DETAIL" - the leading "[01] "
+    # marker made the whole label fail to match at all (bracket isn't a valid NAME character).
+    regions = [_r("[01] BELLOW DETAIL", 100, 100), _r("210", 120, 130)]
+    panels = extract_detail_dimensions(regions)
+    assert len(panels) == 1
+    assert panels[0].component_name == "BELLOW"
+
+
+def test_roman_numeral_suffix_is_matched_in_full():
+    # Regression: "BRACKET DETAIL-II" (a real drawing's second bracket variant) only matched as
+    # far as "BRACKET DETAIL-I", leaving a dangling "I" that broke the full-string anchor - the
+    # whole label silently failed to match and that panel was never found at all.
+    regions = [_r("BRACKET DETAIL-II", 100, 100), _r("50", 120, 130)]
+    panels = extract_detail_dimensions(regions)
+    assert len(panels) == 1
+    assert panels[0].component_name == "BRACKET"
+
+
+def test_other_bom_component_names_and_header_words_never_leak_into_a_panel():
+    # Regression: on a real, densely-laid-out drawing, a panel label's nearby-region window
+    # picked up completely unrelated page content purely by pixel proximity - other BOM item
+    # names ("LIMIT ROD"), table header words ("DESCRIPTION"), and long general-notes sentences.
+    # None of that is ever a genuine dimension and must never be treated as one.
+    regions = [
+        _r("SLEEVE DETAIL", 100, 100),
+        _r("DESCRIPTION", 110, 130),
+        _r("LIMIT ROD", 110, 150),
+        _r("1. SUITABLE SHIPPING BARS WILL BE PROVIDED, PAINTED IN YELLOW", 110, 170),
+        _r("219", 110, 190),
+    ]
+    panels = extract_detail_dimensions(regions, known_descriptions=["Limit Rod", "Sleeve"])
+    sleeve = panels[0]
+    assert sleeve.dimensions == {"l": "219"}
+    assert "DESCRIPTION" not in sleeve.raw_tokens
+    assert "LIMIT ROD" not in sleeve.raw_tokens
+    assert not any("SHIPPING BARS" in t for t in sleeve.raw_tokens)
+
+
 def test_match_panel_to_description_substring_match():
     regions = [
         _r("HOUSING FLANGE DETAIL", 100, 100),

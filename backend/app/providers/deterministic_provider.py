@@ -242,7 +242,8 @@ class DeterministicProvider(DrawingAnalysisProvider):
 
         regions = self._regions_for(image_path)
         table = extract_bom_table(regions) if regions else None
-        detail_panels = extract_detail_dimensions(regions) if regions else []
+        known_descriptions = [row.description for row in table.rows if row.description] if table else []
+        detail_panels = extract_detail_dimensions(regions, known_descriptions) if regions else []
         if table and table.rows:
             components = _rows_to_components(table.rows, page_number=1, detail_panels=detail_panels)
             if not components:

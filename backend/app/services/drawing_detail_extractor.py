@@ -24,9 +24,16 @@ import re
 from dataclasses import dataclass, field
 
 # "<NAME> DETAIL" or "<NAME> DETAIL-A" / "<NAME> DETAIL 'B'" - NAME must be non-empty, so a bare
-# "DETAIL-A" weld/section callout (no component name) is excluded by construction.
+# "DETAIL-A" weld/section callout (no component name) is excluded by construction. An optional
+# leading item-number marker ("[01] BELLOW DETAIL", "01. BELLOW DETAIL") is stripped first -
+# confirmed on a real drawing (3I/26160A) where this exact "[01] " prefix otherwise blocked the
+# whole match, since "[" isn't a valid NAME character.
+_DETAIL_LABEL_LEADING_MARKER_RE = re.compile(r"^(?:\[\d+\]|\d+[.)])\s+")
+# The trailing variant-suffix group allows more than one char so a roman-numeral suffix like
+# "DETAIL-II" (confirmed on a real drawing, 3I/26160A: "BRACKET DETAIL-I" / "BRACKET DETAIL-II")
+# matches fully, not just "DETAIL-I" with a dangling unmatched "I".
 _DETAIL_LABEL_RE = re.compile(
-    r"^(?P<name>[A-Z0-9/&\-]+(?:\s+[A-Z0-9/&\-]+)*)\s+DETAIL(?:\s*-?\s*['\"]?[A-Z0-9]['\"]?)?$"
+    r"^(?P<name>[A-Z0-9/&\-]+(?:\s+[A-Z0-9/&\-]+)*)\s+DETAIL(?:\s*-?\s*['\"]?[A-Z0-9]+['\"]?)?$"
 )
 
 # Explicit dimension-label aliases that may appear as their own OCR region next to a value.
@@ -49,10 +56,40 @@ _DIAMETER_RE = re.compile(r"^[ØøΦ]\s?(\d+(?:\.\d+)?)$")
 _PLAIN_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
 
 # How far below/right of a label region (in OCR pixel space) counts as "this label's panel".
-# MB drawing panels in the observed layout run roughly 250-400px tall; 450 gives headroom
-# without routinely bleeding into the next panel down.
-PANEL_SEARCH_BAND_PX = 450
-PANEL_X_SLACK_PX = 350
+# Deliberately tight: tested directly against a real, densely-laid-out production drawing
+# (3I/26160A) where a looser window (450/350, the original guess) swept in unrelated text from
+# across the whole sheet - general notes paragraphs, the title block's own "QUANTITY" field,
+# even other BOM item names like "LIMIT ROD" - purely because they happened to sit within that
+# radius of a detail-panel label on a crowded page. 150/150 still comfortably covers the
+# synthetic/clean-layout fixtures this module was first built against (see tests/
+# test_drawing_detail_extractor.py), while leaving a genuinely crowded sheet mostly empty
+# (correctly conservative) rather than confidently wrong - see _is_noise_text below for the
+# second, content-based layer of the same defense.
+PANEL_SEARCH_BAND_PX = 150
+PANEL_X_SLACK_PX = 150
+
+# Content-based exclusion, independent of distance: a candidate token is never treated as part
+# of a panel's dimensions if it's unmistakably NOT a dimension callout - a long free-text
+# sentence (general notes, product-spec paragraphs routinely sit near a panel purely by page
+# layout), or a bare word that's actually a BOM-table structural term (DESCRIPTION/MATERIAL/QTY/
+# etc. - see bom_table_extractor.HEADER_TOKENS) or title-block field label (QUANTITY, SIZE(OD),
+# ITEM CODE...) rather than this component's own measurement. Confirmed necessary directly
+# against the same real drawing: even at the full original window, a "BELLOW DETAIL" panel's
+# matched region list included the company address and the word "DESCRIPTION" itself.
+_NOISE_WORD_COUNT_THRESHOLD = 6
+_NOISE_EXACT_TOKENS = {
+    "DESCRIPTION", "MATERIAL", "QTY", "QUANTITY", "ITEM", "ITEM NO", "PART NO",
+    "SIZE", "SIZE(OD)", "SIZE (OD)", "SIZE(NB)", "SIZE (NB)", "ITEM CODE", "MATERIAL CODE",
+    "DRAWING NUMBER", "SCALE", "TITLE", "CUSTOMER", "NO",
+}
+
+
+def _is_noise_text(norm: str) -> bool:
+    if norm in _NOISE_EXACT_TOKENS:
+        return True
+    if len(norm.split()) > _NOISE_WORD_COUNT_THRESHOLD:
+        return True
+    return False
 
 
 def _normalize(text: str) -> str:
@@ -89,7 +126,8 @@ def _find_detail_labels(regions) -> list[tuple]:
     """Returns [(region, component_name)] for every region whose text matches "<NAME> DETAIL"."""
     labels = []
     for region in regions:
-        norm = _normalize(region.text or "")
+        raw = _DETAIL_LABEL_LEADING_MARKER_RE.sub("", (region.text or "").strip())
+        norm = _normalize(raw)
         if not norm or "DETAIL" not in norm:
             continue
         m = _DETAIL_LABEL_RE.match(norm)
@@ -98,10 +136,16 @@ def _find_detail_labels(regions) -> list[tuple]:
     return labels
 
 
-def _assign_to_panels(regions, labels: list[tuple]) -> dict:
+def _assign_to_panels(regions, labels: list[tuple], exclude_texts: set[str] | None = None) -> dict:
     """Nearest-label assignment: every non-label region within PANEL_SEARCH_BAND_PX below (and
     PANEL_X_SLACK_PX across) its closest label goes into that label's panel. A region equidistant
-    or out of range of every label is left out entirely - never force-assigned to a guess."""
+    or out of range of every label is left out entirely - never force-assigned to a guess.
+
+    exclude_texts (normalized, optional) lets the caller pass in text that is DEFINITELY not
+    this panel's own dimension data - typically other BOM components' own descriptions, which
+    have been observed leaking into a panel's matched region list purely by page proximity on a
+    crowded drawing (a different component's name is never that component's own dimension)."""
+    exclude_texts = exclude_texts or set()
     label_regions = {id(r) for r, _ in labels}
     panels: dict[int, list] = {id(r): [] for r, _ in labels}
     for region in regions:
@@ -109,6 +153,9 @@ def _assign_to_panels(regions, labels: list[tuple]) -> dict:
             continue
         text = (region.text or "").strip()
         if not text:
+            continue
+        norm = _normalize(text)
+        if _is_noise_text(norm) or norm in exclude_texts:
             continue
         best_label = None
         best_dist = None
@@ -203,17 +250,23 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
     return dimensions, raw_tokens, avg_conf
 
 
-def extract_detail_dimensions(regions) -> list[DetailPanel]:
+def extract_detail_dimensions(regions, known_descriptions: list[str] | None = None) -> list[DetailPanel]:
     """`regions` is a list of app.services.paddle_ocr.OcrRegion (text, confidence, bbox).
     Returns one DetailPanel per recognized "<NAME> DETAIL" label found on the page, with
     whatever dimensions could be confidently parsed nearby. Returns [] when no such panel is
-    found - never fabricates a panel or a dimension that isn't backed by an OCR token."""
+    found - never fabricates a panel or a dimension that isn't backed by an OCR token.
+
+    known_descriptions (optional) is the drawing's own BOM row descriptions (from
+    bom_table_extractor) - excluded from every panel's candidate tokens, since any of them
+    appearing inside ANOTHER component's panel window is page-layout noise, not that
+    component's own dimension (see _assign_to_panels's exclude_texts docstring)."""
     if not regions:
         return []
     labels = _find_detail_labels(regions)
     if not labels:
         return []
-    panel_regions_by_label = _assign_to_panels(regions, labels)
+    exclude_texts = {_normalize(d) for d in (known_descriptions or [])}
+    panel_regions_by_label = _assign_to_panels(regions, labels, exclude_texts=exclude_texts)
 
     results: list[DetailPanel] = []
     for label_region, component_name in labels:

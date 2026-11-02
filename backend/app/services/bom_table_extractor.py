@@ -90,10 +90,14 @@ def _y_overlap(bbox_a, bbox_b) -> float:
 
 # Pixel gap beyond which two x-sorted regions are no longer treated as the same
 # transposed-table "run" - see _extract_transposed_bom_table below. Real items in one of these
-# title blocks sit 3-30px apart; the gap to an unrelated field (a separate spec-parameters
-# block sharing the same page, say) runs 150px+, so 100 cleanly separates the two without
-# needing to hand-tune per drawing.
-TRANSPOSED_RUN_GAP_PX = 100
+# title blocks sit 13-18px apart (measured directly off a real drawing, WO-3I/26160A: BELLOWS
+# -> SLEEVE -> FLANGE-I -> ... -> NUT & LOCK NUT all 13-18px apart). 100 was too loose: on that
+# same drawing it let an 86px gap through to an unrelated "COLLAR DETAIL" panel-label region
+# sitting nearby, which got swept in as a bogus 9th BOM item (and, via its own 15px gap, pulled
+# in a stray "10" right after it as a 10th). 50 keeps a healthy margin above every observed
+# real inter-item gap while still cutting well below the 150px+ gap to a genuinely unrelated
+# field (e.g. a spec-parameters block's "QUANTITY" cell sharing the same page/row band).
+TRANSPOSED_RUN_GAP_PX = 50
 
 
 def _contiguous_x_run(candidates: list, start_x: float) -> list:

@@ -216,3 +216,29 @@ def test_transposed_table_items_as_columns_not_rows():
     assert by_description["COLLAR"] == ""
     assert "QUANTITY" not in descriptions
     assert "MATERIAL No." not in descriptions
+
+
+def test_tight_run_gap_excludes_a_nearby_unrelated_panel_label():
+    # Regression: a real production drawing (3I/26160A) had real BOM items 13-18px apart, and
+    # an unrelated "COLLAR DETAIL" panel-label region sitting only 86px past the last real item
+    # - well under the old TRANSPOSED_RUN_GAP_PX=100, so it got swept in as a bogus 9th BOM row
+    # (and, via its own 15px gap, pulled in a stray "10" right after it as a 10th). The gap was
+    # tightened to 50 specifically because of this; this fixture reproduces the real spacing.
+    desc_y, mat_y = 1596, 1859
+    regions = [
+        _region("DESCRIPTION", 428, desc_y, w=27, h=20),
+        _region("BELLOWS", 475, desc_y, w=34, h=20),
+        _region("SLEEVE", 522, desc_y, w=34, h=20),
+        _region("MATERIAL", 428, mat_y, w=27, h=20),
+        _region("A 240 TYP 304", 465, mat_y, w=50, h=20),
+        _region("A 240 Gr. 304", 519, mat_y, w=50, h=20),
+        # 86px past SLEEVE's own x1 (522+34=556) - a real unrelated panel label, not a BOM item.
+        _region("COLLAR DETAIL", 642, desc_y, w=27, h=20),
+        _region("10", 684, desc_y, w=20, h=20),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    descriptions = {row.description for row in table.rows}
+    assert descriptions == {"BELLOWS", "SLEEVE"}
+    assert "COLLAR DETAIL" not in descriptions
+    assert "10" not in descriptions
