@@ -15,12 +15,28 @@ fully offline with no network calls and no paid API.
 from __future__ import annotations
 
 import logging
+import threading
 import traceback
 from dataclasses import dataclass, field
 
 import numpy as np
 
 logger = logging.getLogger("app.services.paddle_ocr")
+
+# Guards every call into the shared PaddleOCR engine singleton (see _get_engine below).
+# FastAPI's sync endpoints run on a threadpool, and this app has (at least) two independent
+# call sites that can each trigger a fresh OCR pass on the SAME engine instance: the analysis
+# pipeline's own pass and the on-demand "OCR Evidence" endpoint
+# (app.routers.drawings.get_page_ocr_regions) re-running OCR against a stored page preview -
+# nothing serialized these against each other. PaddleOCR's underlying oneDNN/MKL-DNN CPU
+# inference backend is NOT safe to call concurrently from multiple threads on one predictor
+# instance; two overlapping calls is a known, reproducible cause of a low-level
+# "could not execute a primitive descriptor" failure that looks image-specific but isn't -
+# the single-threaded repro of a real failing drawing succeeded every time. This lock makes
+# every `.ocr()` call strictly sequential instead of reaching for N separate engine instances
+# (each one loads its own copy of the detection/recognition/classification model weights into
+# memory - not worth it for a local/demo deployment's request volume).
+_ocr_call_lock = threading.Lock()
 
 # Compatibility shim, applied before anything imports paddleocr/imgaug.
 #
@@ -229,22 +245,23 @@ def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResul
     rescale = 1.0  # multiply returned bbox coords by 1/rescale to project back to full-res space
     try:
         processed = preprocess_image(image)
-        raw = engine.ocr(processed, cls=True)
+        with _ocr_call_lock:
+            raw = engine.ocr(processed, cls=True)
     except Exception as exc:
-        # PaddlePaddle's CPU (oneDNN/MKL-DNN) inference backend can throw a low-level
-        # "could not execute a primitive" error on an otherwise-valid image - observed in
-        # practice on large rasterized full-sheet drawings (very large or oddly-proportioned
-        # pixel arrays trip a primitive-construction limit inside the detection backbone).
-        # Retried once, downscaled to a safer max dimension and without the angle classifier
-        # (one less model/primitive in the pipeline) - a real fallback, not a silent skip: if
-        # this retry also fails, the original error is still what gets reported, not masked.
+        # The usual cause of a "could not execute a primitive descriptor"-style failure here is
+        # exactly what _ocr_call_lock above now prevents (two threads hitting the shared engine
+        # at once) - but keep this downscaled retry as a second line of defense for the rarer
+        # case where a specific image genuinely trips a primitive-construction limit inside the
+        # detection backbone on its own. A real fallback, not a silent skip: if the retry also
+        # fails, the original error is still what gets reported, never masked.
         logger.warning(
             "PaddleOCR failed on page %s at full resolution (%s); retrying downscaled: %s",
             page_number, getattr(image, "shape", "?"), exc,
         )
         try:
             downscaled, rescale = _downscale_for_retry(image)
-            raw = engine.ocr(downscaled, cls=False)
+            with _ocr_call_lock:
+                raw = engine.ocr(downscaled, cls=False)
         except Exception:
             return PageOcrResult(page_number=page_number, configured=False, error=str(exc))
 
