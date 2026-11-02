@@ -118,6 +118,59 @@ def test_other_bom_component_names_and_header_words_never_leak_into_a_panel():
     assert not any("SHIPPING BARS" in t for t in sleeve.raw_tokens)
 
 
+def test_ocr_misread_diameter_symbol_as_zero_is_still_parsed():
+    # Regression: PaddleOCR has repeatedly misread the "Ø" diameter glyph as a bare "0" on two
+    # separate real drawings (WO-9347: "Ø 219" -> "0 219"; WO-9374: "Ø 559" -> "0 559"). Without
+    # this, every such callout silently fell through to the generic dim_N bucket instead of OD/ID.
+    regions = [
+        _r("HOUSING FLANGE DETAIL", 100, 100),
+        _r("0 810", 120, 140),
+        _r("0 559", 120, 170),
+    ]
+    panels = extract_detail_dimensions(regions)
+    flange = panels[0]
+    assert flange.dimensions["od"] == "810"
+    assert flange.dimensions["id"] == "559"
+
+
+def test_small_leading_zero_value_is_not_misread_as_a_diameter():
+    # A real small measurement that happens to start with "0 " (e.g. an OCR split of a decimal
+    # like "0 6") must not be swept up by the Ø-misread tolerance, which is deliberately scoped
+    # to 2+ digit values (the smallest real OD/ID callout on these drawings is 3 digits).
+    regions = [_r("SLEEVE DETAIL", 100, 100), _r("0 6", 120, 140)]
+    panels = extract_detail_dimensions(regions)
+    assert panels[0].dimensions == {}
+
+
+def test_notes_fragment_with_a_colon_is_excluded_from_a_panel():
+    # Regression: "GENERAL NOTES:-" (and similar label-style fragments like "NOTE :-", "Min
+    # DFT: 40 TO 50 MICRON") leaked into a panel's matched tokens on a real drawing purely by
+    # page proximity - a genuine dimension callout on these drawings never carries a colon.
+    regions = [
+        _r("BRACKET DETAIL-I", 100, 100),
+        _r("GENERAL NOTES:-", 110, 130),
+        _r("028", 110, 150),
+    ]
+    panels = extract_detail_dimensions(regions)
+    bracket = panels[0]
+    assert "GENERAL NOTES:-" not in bracket.raw_tokens
+
+
+def test_material_grade_text_is_excluded_from_a_panel():
+    # Regression: material-grade cells ("A 240 TYP 304", "SS 304", "IS 2062 E250 BR") leaked
+    # into a panel's matched tokens on a real drawing - these are always a MATERIAL column
+    # value, never a component's own dimension, regardless of how close they sit to a label.
+    regions = [
+        _r("COLLAR DETAIL", 100, 100),
+        _r("A 240 TYP 304", 110, 130),
+        _r("SS 304", 110, 150),
+        _r("IS 2062 E250 BR", 110, 170),
+    ]
+    panels = extract_detail_dimensions(regions)
+    collar = panels[0]
+    assert collar.raw_tokens == []
+
+
 def test_match_panel_to_description_substring_match():
     regions = [
         _r("HOUSING FLANGE DETAIL", 100, 100),

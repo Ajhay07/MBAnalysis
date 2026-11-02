@@ -52,21 +52,38 @@ _ALL_LABEL_TOKENS = {alias: key for key, aliases in _DIM_LABEL_ALIASES.items() f
 _INLINE_LABELED_RE = re.compile(
     r"^(OD|ID|THK|TK|PCD|L)\s*[:\-]?\s*(\d+(?:\.\d+)?)$"
 )
-_DIAMETER_RE = re.compile(r"^[ØøΦ]\s?(\d+(?:\.\d+)?)$")
+# PaddleOCR has repeatedly been observed misreading the "Ø" diameter glyph as a bare digit "0"
+# (confirmed on two separate real drawings, WO-9347 and WO-9374: "Ø 219" -> "0 219", "Ø 559" ->
+# "0 559") - accepted alongside the real symbol. A bare leading "0" is only treated this way
+# when followed by a space and a plausible-sized value (3+ digits, i.e. an actual OD/ID callout,
+# not an ordinary small measurement that happens to start with a literal "0 ...").
+_DIAMETER_RE = re.compile(r"^(?:[ØøΦ]|0(?=\s))\s?(\d{2,}(?:\.\d+)?)$")
 _PLAIN_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
 
 # How far below/right of a label region (in OCR pixel space) counts as "this label's panel".
-# Deliberately tight: tested directly against a real, densely-laid-out production drawing
-# (3I/26160A) where a looser window (450/350, the original guess) swept in unrelated text from
-# across the whole sheet - general notes paragraphs, the title block's own "QUANTITY" field,
-# even other BOM item names like "LIMIT ROD" - purely because they happened to sit within that
-# radius of a detail-panel label on a crowded page. 150/150 still comfortably covers the
-# synthetic/clean-layout fixtures this module was first built against (see tests/
-# test_drawing_detail_extractor.py), while leaving a genuinely crowded sheet mostly empty
-# (correctly conservative) rather than confidently wrong - see _is_noise_text below for the
-# second, content-based layer of the same defense.
+# Tuned against two different real production drawings, which pull in OPPOSITE directions:
+# - 3I/26160A (dense layout): even a 150/150 window still let general-notes fragments and
+#   material-grade cells leak in (see _is_noise_text/_looks_like_material_grade below) -
+#   wider only made it worse.
+# - 3C/25812/MB/25-26 (grid layout, WO-9374): dimensions for a given panel sit BOTH above and
+#   below its label and up to ~260px away, since adjacent panel labels can sit as little as
+#   ~60px apart - a wider window recovers real OD values here, but at the cost of exactly the
+#   contamination the other drawing demonstrated.
+# Deliberately kept TIGHT despite that cost: a missed real dimension leaves a panel empty,
+# correctly prompting manual confirmation; a wrongly-admitted one looks like real data and is
+# the one thing this whole system is built to never produce (see 9347.pdf's "Bellow got
+# assigned a real-looking but wrong OD" finding earlier in this drawing family's own history).
+# Content-based filtering (_is_noise_text, _looks_like_material_grade, known_descriptions) is
+# the real second line of defense, independent of this radius.
 PANEL_SEARCH_BAND_PX = 150
 PANEL_X_SLACK_PX = 150
+# Wider allowance used ONLY for tokens that already look unmistakably like a diameter callout
+# (see is_diameter_token in _assign_to_panels below) - recovers real OD/ID values on a
+# grid-laid-out drawing (confirmed against WO-9374: Housing Flange's own Ø810/Ø559 sit 183-261px
+# from its label) without reopening the door to general notes/material-grade contamination,
+# which plain numbers and free text are still held to the tight band above for.
+_DIAMETER_SEARCH_BAND_PX = 280
+_DIAMETER_X_SLACK_PX = 220
 
 # Content-based exclusion, independent of distance: a candidate token is never treated as part
 # of a panel's dimensions if it's unmistakably NOT a dimension callout - a long free-text
@@ -76,16 +93,30 @@ PANEL_X_SLACK_PX = 150
 # ITEM CODE...) rather than this component's own measurement. Confirmed necessary directly
 # against the same real drawing: even at the full original window, a "BELLOW DETAIL" panel's
 # matched region list included the company address and the word "DESCRIPTION" itself.
-_NOISE_WORD_COUNT_THRESHOLD = 6
+_NOISE_WORD_COUNT_THRESHOLD = 4
 _NOISE_EXACT_TOKENS = {
     "DESCRIPTION", "MATERIAL", "QTY", "QUANTITY", "ITEM", "ITEM NO", "PART NO",
     "SIZE", "SIZE(OD)", "SIZE (OD)", "SIZE(NB)", "SIZE (NB)", "ITEM CODE", "MATERIAL CODE",
     "DRAWING NUMBER", "SCALE", "TITLE", "CUSTOMER", "NO",
 }
+# A label-style fragment ("GENERAL NOTES:-", "NOTE :-", "Min DFT: 40 TO 50 MICRON") almost
+# always carries a colon on these drawings; a real dimension callout never does. Confirmed on
+# a real drawing (3I/26160A) where "GENERAL NOTES:-" otherwise leaked into a panel's tokens.
+_NOISE_COLON_RE = re.compile(r"[:：]")
+# Common MB material-grade patterns ("A 240 TYP 304", "A 240 Gr. 304", "SS 304", "IS 2062 E250
+# BR") - these are MATERIAL cells, never a component's own dimension, and have been observed
+# leaking into a panel's candidates on a dense sheet purely by proximity to other BOM columns.
+_MATERIAL_GRADE_RE = re.compile(
+    r"^(A\s?\d{2,4}\s?(TYP|GR)|SS\s?\d{3}|IS\s?\d{3,4}|EN\s?\d{1,3})\b", re.IGNORECASE
+)
 
 
 def _is_noise_text(norm: str) -> bool:
     if norm in _NOISE_EXACT_TOKENS:
+        return True
+    if _NOISE_COLON_RE.search(norm):
+        return True
+    if _MATERIAL_GRADE_RE.match(norm):
         return True
     if len(norm.split()) > _NOISE_WORD_COUNT_THRESHOLD:
         return True
@@ -157,12 +188,21 @@ def _assign_to_panels(regions, labels: list[tuple], exclude_texts: set[str] | No
         norm = _normalize(text)
         if _is_noise_text(norm) or norm in exclude_texts:
             continue
+        # A token that is itself unmistakably a diameter callout (real Ø symbol, or the
+        # confirmed OCR misread of it) is distinctive enough - unlike a bare plain number or
+        # free text - that it's safe to look further for it than for anything else: real
+        # OD/ID values on a grid-laid-out drawing (WO-9374) have been confirmed up to ~260px
+        # from their panel's own label, well past where plain numbers/notes text would be
+        # trusted. Anything else keeps the tight default band.
+        is_diameter_token = bool(_DIAMETER_RE.match(text))
+        y_limit = _DIAMETER_SEARCH_BAND_PX if is_diameter_token else PANEL_SEARCH_BAND_PX
+        x_limit = _DIAMETER_X_SLACK_PX if is_diameter_token else PANEL_X_SLACK_PX
         best_label = None
         best_dist = None
         for label_region, _name in labels:
-            dy = _y_center(region.bbox) - _y_center(label_region.bbox)
+            dy = abs(_y_center(region.bbox) - _y_center(label_region.bbox))
             dx = abs(_x_center(region.bbox) - _x_center(label_region.bbox))
-            if dy < -5 or dy > PANEL_SEARCH_BAND_PX or dx > PANEL_X_SLACK_PX:
+            if dy > y_limit or dx > x_limit:
                 continue
             dist = _distance(region.bbox, label_region.bbox)
             if best_dist is None or dist < best_dist:
