@@ -103,6 +103,16 @@ def test_format_size_text_empty_dimensions_returns_empty_string():
     assert format_size_text(None) == ""
 
 
+def test_format_size_text_renders_bare_size_key_without_label_prefix():
+    """A {"size": "<text>"} dict - either a BOM-table SIZE-column cell (bom_table_extractor)
+    or a reviewer's manual entry for a drawing the automated extractors can't read
+    (ComponentUpdate.dimensions) - must render as plain text, not "size OD 219  Thk 9.5"."""
+    assert format_size_text({"size": "OD 219  Thk 9.5"}) == "OD 219  Thk 9.5"
+    assert format_size_text({"od": "240", "size": "ignored when od/thk present"}) == (
+        "OD 240  ignored when od/thk present"
+    )
+
+
 def test_indent_rule_manual_required_never_fabricates_a_quantity(db):
     """A MANUAL_REQUIRED rule (e.g. filler wire with no approved rate yet) must always come
     back with wt_qty=None and requires_confirmation=True - this is the spec's explicit "do not

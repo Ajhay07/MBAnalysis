@@ -28,10 +28,15 @@ from app.models.models import (
 # keys (OD/ID/Thk/L is the pattern used throughout MB's drawings - see bellow/end-pipe/flange/
 # sleeve rows on 9347.pdf). Any other keys are appended afterwards, in insertion order, so a
 # differently-shaped dimensions dict still renders instead of being silently dropped.
-_SIZE_KEY_ORDER = ["od", "id", "thk", "l", "length", "width", "height", "dia", "pcd", "hole_dia", "noh"]
+_SIZE_KEY_ORDER = ["od", "id", "thk", "l", "length", "width", "height", "dia", "pcd", "hole_dia", "noh", "size"]
 _SIZE_KEY_LABELS = {
     "od": "OD", "id": "ID", "thk": "Thk", "l": "L", "length": "L", "width": "W", "height": "H",
     "dia": "Dia", "pcd": "PCD", "hole_dia": "Hole Ø", "noh": "No. of Holes",
+    # "size" carries pre-formatted free text (either a raw SIZE-column cell from the printed BOM
+    # table, or a reviewer's manual entry for a drawing the automated extractors can't read - see
+    # app.schemas.api.ComponentUpdate.dimensions) - render it as-is, with no synthetic "size "
+    # label prefix, matching how every other callout already reads on a real indent sheet.
+    "size": "",
 }
 
 
@@ -47,7 +52,7 @@ def format_size_text(dimensions: dict | None) -> str:
     for key in _SIZE_KEY_ORDER:
         if key in dimensions and dimensions[key] not in (None, ""):
             label = _SIZE_KEY_LABELS.get(key, key)
-            parts.append(f"{label} {dimensions[key]}")
+            parts.append(f"{label} {dimensions[key]}" if label else str(dimensions[key]))
             seen.add(key)
     for key, value in dimensions.items():
         if key not in seen and value not in (None, ""):

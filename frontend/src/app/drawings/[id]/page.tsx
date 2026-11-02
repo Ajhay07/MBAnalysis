@@ -583,11 +583,21 @@ export default function DrawingViewerPage() {
                               </div>
                             </div>
                             <div className="text-sm">{c.description}</div>
-                            {formatSizeText(c.dimensions) && (
-                              <div className="text-xs text-ink font-medium mt-0.5">
-                                Size: {formatSizeText(c.dimensions)}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-xs text-steel">Size:</span>
+                              <input
+                                type="text"
+                                className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
+                                placeholder="not extracted - enter manually, e.g. OD 219  Thk 9.5"
+                                defaultValue={formatSizeText(c.dimensions)}
+                                onBlur={(e) => {
+                                  const text = e.target.value.trim();
+                                  if (text !== formatSizeText(c.dimensions)) {
+                                    updateComponent(c, { dimensions: text ? { size: text } : {} });
+                                  }
+                                }}
+                              />
+                            </div>
                             <div className="text-xs text-steel mt-0.5">
                               {c.category} &middot; Qty {c.quantity} &middot; {c.material || "material n/a"}
                               {pageCount > 1 && (
@@ -661,7 +671,18 @@ export default function DrawingViewerPage() {
                             <td className="td !px-2 font-medium whitespace-nowrap">{c.part_number || "—"}</td>
                             <td className="td !px-2 text-steel">{c.description}</td>
                             <td className="td !px-2 text-steel">
-                              {formatSizeText(c.dimensions) || <span className="text-steel-light">not extracted</span>}
+                              <input
+                                type="text"
+                                className="input !w-32 !py-0.5 !px-1.5 !text-xs"
+                                placeholder="not extracted"
+                                defaultValue={formatSizeText(c.dimensions)}
+                                onBlur={(e) => {
+                                  const text = e.target.value.trim();
+                                  if (text !== formatSizeText(c.dimensions)) {
+                                    updateComponent(c, { dimensions: text ? { size: text } : {} });
+                                  }
+                                }}
+                              />
                             </td>
                             <td className="td !px-2 text-right">{c.quantity}</td>
                             <td className="td !px-2"><MakeBuyBadge value={c.make_buy} /></td>

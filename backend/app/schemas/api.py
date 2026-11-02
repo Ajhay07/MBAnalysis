@@ -81,6 +81,13 @@ class ComponentUpdate(BaseModel):
     grade: str | None = None
     make_buy: str | None = None
     verification_status: str | None = None
+    # Lets a reviewer fill in SIZE by hand for drawings whose layout the automated extractors
+    # can't read (e.g. dimensions placed directly on the main view with no labeled "<NAME>
+    # DETAIL" panel and no BOM-table SIZE column - see app.services.drawing_detail_extractor).
+    # A plain {"size": "<free text>"} dict is the simplest form; format_size_text (backend) and
+    # formatSizeText (frontend) both already render a bare "size" key as-is, same convention
+    # deterministic_provider uses when the BOM table itself carries a SIZE cell.
+    dimensions: dict | None = None
 
 
 class BomLineItemOut(BaseModel):
