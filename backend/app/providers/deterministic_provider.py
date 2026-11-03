@@ -15,6 +15,7 @@ ground is reported in missing_info/ambiguities instead of being guessed, matchin
 ComponentCandidate's own source_text/is_assumption evidence requirement.
 """
 
+import difflib
 import re
 
 try:
@@ -160,6 +161,78 @@ def _embedded_text_numeric_regions(pdf_path: str, page_number: int) -> list[OcrR
 
 def _pdf_block_text(block: dict) -> str:
     return "".join("".join(s.get("text", "") for s in line.get("spans", [])) for line in block.get("lines", [])).strip()
+
+
+_DESCRIPTION_FUZZY_MATCH_THRESHOLD = 0.8
+
+
+def _pdf_structural_item_descriptions(pdf_path: str, page_number: int, ocr_descriptions: list[str]) -> dict[str, str]:
+    """{ocr_description: corrected_description} for a transposed-layout BOM table's item names,
+    using the SAME PyMuPDF block-clustering source as _pdf_structural_materials. The OCR-region
+    item-identification pipeline gets item BOUNDARIES right (confirmed: component count and
+    column order are both correct) but sometimes misreads individual characters - "NUT &
+    LOCKNUT" -> "JUT & LOCKNUT", "SHROUD SUPPORT" -> "IROUD SUPPORT", "SLEEVE" -> "SLEEV" are
+    all real production examples, confirmed against PyMuPDF's embedded-text blocks for the same
+    row reading correctly. Unlike _pdf_structural_materials (which anchors on an exact/near-
+    exact substring match of an already-correct description), this has to tolerate the
+    description itself being wrong - matched by FUZZY text similarity (difflib) against every
+    item-row block, not exact substring containment, since the count/order between the OCR list
+    and the PDF's own block list isn't guaranteed to line up 1:1 (a whole item can be missing
+    from the OCR side - confirmed: "M8 Bolt & Nut" was dropped entirely from the OCR item list
+    on the same drawing where "Nut & Locknut" came through letter-mangled). Only a
+    confident match (ratio >= _DESCRIPTION_FUZZY_MATCH_THRESHOLD) is returned, and an exact
+    match is included too (so the caller can apply this uniformly without a separate
+    equality check) - never a low-confidence guess. Returns {} (never raises) on any error or
+    missing table structure."""
+    if fitz is None or not ocr_descriptions:
+        return {}
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return {}
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return {}
+
+    desc_label = next((b for b in blocks if _pdf_block_text(b).strip().upper() == "DESCRIPTION"), None)
+    if desc_label is None:
+        return {}
+    dx0, dy0, dx1, dy1 = desc_label["bbox"]
+    item_row_texts = []
+    for b in blocks:
+        if b is desc_label:
+            continue
+        t = _pdf_block_text(b)
+        if not t:
+            continue
+        x0, y0, x1, y1 = b["bbox"]
+        y_overlap = min(y1, dy1) - max(y0, dy0)
+        if y_overlap > 0 and x0 > dx1 and x0 < dx1 + 250:
+            item_row_texts.append(t)
+    if not item_row_texts:
+        return {}
+
+    results: dict[str, str] = {}
+    for description in ocr_descriptions:
+        if not description:
+            continue
+        best = max(
+            item_row_texts,
+            key=lambda t: difflib.SequenceMatcher(None, description.upper(), t.upper()).ratio(),
+        )
+        ratio = difflib.SequenceMatcher(None, description.upper(), best.upper()).ratio()
+        if ratio >= _DESCRIPTION_FUZZY_MATCH_THRESHOLD:
+            # A matched block can carry a merged trailing quantity digit with no space (same
+            # PyMuPDF clustering artifact as _pdf_structural_materials' "COLLAR4" case) - e.g.
+            # "END PIPE2" for a row whose real name is just "END PIPE". Strip one bare trailing
+            # digit so the corrected description doesn't pick up a quantity by accident.
+            cleaned = re.sub(r"(?<=[A-Za-z])\d$", "", best).strip()
+            results[description] = cleaned or best
+    return results
 
 
 def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple[str, str]]) -> dict[str, str]:
@@ -464,11 +537,22 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     "with enough confidence to become a component - add components manually."
                 )
             elif pdf_path:
-                # Override each component's material with the PDF-structural lookup when it
-                # found one - see _pdf_structural_materials' own docstring for why this is more
-                # reliable than the OCR-region geometry the material came from above. Item
-                # identification/quantity are left untouched; only material is ever replaced,
-                # and only when a lookup actually produced something.
+                # Correct item descriptions FIRST (see _pdf_structural_item_descriptions - OCR
+                # misreads individual characters, e.g. "NUT & LOCKNUT" -> "JUT & LOCKNUT"), then
+                # look up materials using the now-corrected descriptions - a wrong description
+                # was also why those same rows' materials came back blank (the text-match in
+                # _pdf_structural_materials never found anything for the garbled name). Item
+                # IDENTITY (count/order) and quantity are left untouched; only the description
+                # text itself and material are ever replaced, and only when a lookup actually
+                # found something confident enough.
+                better_descriptions = _pdf_structural_item_descriptions(
+                    pdf_path, page_number, [c.description for c in components]
+                )
+                for c in components:
+                    corrected = better_descriptions.get(c.description)
+                    if corrected:
+                        c.description = corrected
+
                 items = [
                     (c.description, f"{c.quantity:g}" if c.quantity is not None else "")
                     for c in components
