@@ -120,6 +120,10 @@ def test_unknown_component_reported_not_dropped():
     assert gasket["status"] == "REVIEW_REQUIRED"
     assert gasket["dimension_detail"]["classification"]["value"] == "UNCLASSIFIED"
     assert "Gasket" in output["diagnostics"]["unclassified_components"]
+    # Regression: an unclassified component's quantity must still be preserved - we can't
+    # calculate its dimensions, but its quantity is a known fact independent of that.
+    assert gasket["total_quantity"] == 4  # 2 per assembly * 2 assemblies
+    assert gasket["reference_indent_quantity"] == 4
 
 
 # --- Incorrect / ambiguous dimension mapping --------------------------------------------------

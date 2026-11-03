@@ -53,19 +53,32 @@ def _find_evidence(evidence: dict[str, RawComponentEvidence], description: str) 
     return None
 
 
-def _build_unclassified(comp_input: ComponentInput) -> ComponentOutput:
+def _build_unclassified(comp_input: ComponentInput, assembly_quantity: float) -> ComponentOutput:
     """A component in WorkOrderInputs that no registered spec could classify - reported as its
     own entry (status REVIEW_REQUIRED, via an empty dimensions dict) rather than silently
-    dropped, so an unknown/new component type is always visible in the output."""
+    dropped, so an unknown/new component type is always visible in the output. Its quantity is
+    still a known fact about the work order even though we can't calculate its dimensions, so
+    it's preserved the same way a classified component's would be - not lost just because
+    classification failed."""
+    from engineering_engine.validation.bom_validator import calculate_total_quantity, reference_only_quantity
     from engineering_engine.validation.dimension_validator import DimensionResult, DimensionStatus
+
     note = DimensionResult(
         name="classification", value="UNCLASSIFIED", unit="", status=DimensionStatus.REVIEW_REQUIRED,
         component=comp_input.description,
         notes="No registered ComponentSpec matched this description - add one to the registry, or confirm the spelling/alias.",
     )
+    quantity = None
+    if comp_input.quantity_per_assembly is not None:
+        quantity = calculate_total_quantity(
+            comp_input.description, comp_input.quantity_per_assembly, assembly_quantity,
+            comp_input.reference_indent_quantity,
+        )
+    elif comp_input.reference_indent_quantity is not None:
+        quantity = reference_only_quantity(comp_input.description, comp_input.reference_indent_quantity)
     return ComponentOutput(
         name=comp_input.description, material=comp_input.material, dimensions={"classification": note},
-        reference_dimensions=comp_input.reference_dimensions,
+        reference_dimensions=comp_input.reference_dimensions, quantity=quantity,
     )
 
 
@@ -98,7 +111,7 @@ def build_components(inputs: WorkOrderInputs) -> tuple[list[ComponentOutput], Ro
 
         if spec is None:
             diagnostics.unclassified_components.append(comp_input.description)
-            components.append(_build_unclassified(comp_input))
+            components.append(_build_unclassified(comp_input, inputs.assembly_quantity))
             continue
 
         spec_matches.setdefault(spec.identifier, []).append(comp_input.description)

@@ -102,9 +102,9 @@
         }
       },
       "calculation": null,
-      "quantity_per_assembly": null,
-      "total_quantity": null,
-      "reference_indent_quantity": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 4,
+      "reference_indent_quantity": 4,
       "quantity_discrepancy": false,
       "status": "REVIEW_REQUIRED",
       "missing_inputs": [],
