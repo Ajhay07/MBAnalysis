@@ -137,6 +137,11 @@ export default function DrawingViewerPage() {
   const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
   const [referenceBom, setReferenceBom] = useState<ReferenceBomResponse | null>(null);
   const [catalogById, setCatalogById] = useState<Record<string, any>>({});
+  // Only used when the drawing's own title block has no QUANTITY field (OCR couldn't find it -
+  // title_block.drawing_quantity is null) - a local, unsaved override so each component's total
+  // quantity can still be shown/calculated here, without waiting for the Generate Indent Sheet
+  // form (which has its own, separately-saved assembly_quantity for the actual indent run).
+  const [manualAssemblyQty, setManualAssemblyQty] = useState<string>("");
   const [allDrawings, setAllDrawings] = useState<Drawing[]>([]);
   const [tab, setTab] = useState<"info" | "components" | "bom">("info");
   // Single-action indent workflow: the user just wants "upload -> Indent Sheet", not a
@@ -313,6 +318,17 @@ export default function DrawingViewerPage() {
 
   const pageCount = activeAnalysis?.page_count ?? 1;
   const components = activeAnalysis?.components ?? [];
+  // The drawing's own "QUANTITY" title-block field (how many assemblies this drawing covers -
+  // see app.providers.deterministic_provider._parse_drawing_quantity_and_nb), read the same way
+  // the Generate Indent Sheet button already defaults assembly_quantity from it. Lets each
+  // component show its own TOTAL quantity (formula #5: quantity_per_assembly * assemblies),
+  // live, without waiting for an indent to be generated.
+  const parsedTitleBlockQty = (activeAnalysis?.title_block as Record<string, unknown> | undefined)?.drawing_quantity as
+    | number
+    | null
+    | undefined;
+  const manualQtyParsed = parseFloat(manualAssemblyQty);
+  const assemblyQuantity = parsedTitleBlockQty ?? (Number.isNaN(manualQtyParsed) ? null : manualQtyParsed);
 
   function catalogStatus(c: Component): string {
     const cat = c.catalog_component_id ? catalogById[c.catalog_component_id] : null;
@@ -603,6 +619,21 @@ export default function DrawingViewerPage() {
                     <p className="text-xs text-steel-light mb-3">
                       AI-interpreted values, human-gated by Verified/Unverified/Rejected and Make/Buy/Review.
                     </p>
+                    {parsedTitleBlockQty == null && (
+                      <div className="flex items-center gap-1.5 mb-3 text-xs">
+                        <span className="text-steel">
+                          Assembly qty not found on the drawing - set it to see each component&apos;s total quantity:
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          className="input !w-20 !py-0.5 !px-1.5 !text-xs"
+                          placeholder="e.g. 4"
+                          value={manualAssemblyQty}
+                          onChange={(e) => setManualAssemblyQty(e.target.value)}
+                        />
+                      </div>
+                    )}
                     <div className="space-y-3">
                       {components.map((c) => {
                         const cat = c.catalog_component_id ? catalogById[c.catalog_component_id] : null;
@@ -670,6 +701,15 @@ export default function DrawingViewerPage() {
                               {c.quantity_basis === "assumed" && (
                                 <span className="text-xs text-amber-600" title="Could not be read from the drawing's BOM table - this is a placeholder, not a confirmed reading.">
                                   unconfirmed
+                                </span>
+                              )}
+                              {assemblyQuantity != null ? (
+                                <span className="text-xs text-steel-light" title={`${c.quantity} per assembly × ${assemblyQuantity} assemblies - the figure this prints on the generated indent's WT/QTY column.`}>
+                                  = {c.quantity * assemblyQuantity} total
+                                </span>
+                              ) : (
+                                <span className="text-xs text-steel-light" title="The drawing's own assembly quantity (title block QUANTITY field) wasn't found - set it on Generate Indent Sheet to see each component's total.">
+                                  (set assembly qty to total)
                                 </span>
                               )}
                             </div>
@@ -828,6 +868,11 @@ export default function DrawingViewerPage() {
                               />
                               {c.quantity_basis === "assumed" && (
                                 <div className="text-xs text-amber-600 whitespace-nowrap">unconfirmed</div>
+                              )}
+                              {assemblyQuantity != null && (
+                                <div className="text-xs text-steel-light whitespace-nowrap" title={`${c.quantity} per assembly × ${assemblyQuantity} assemblies`}>
+                                  = {c.quantity * assemblyQuantity} total
+                                </div>
                               )}
                             </td>
                             <td className="td !px-2"><MakeBuyBadge value={c.make_buy} /></td>
