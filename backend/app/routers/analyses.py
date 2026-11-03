@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.models import Analysis, Component, AuditLog, Bom, User
 from app.schemas.api import AnalysisOut, ComponentOut, ComponentUpdate, BomOut
 from app.services.bom_service import generate_bom_from_analysis
-from app.services.calc_engine_service import run_component_calculation
+from app.services.calc_engine_service import compute_bellows_or_shroud_result, run_component_calculation
 
 router = APIRouter(prefix="/api/analyses", tags=["analyses"])
 
@@ -34,6 +34,15 @@ def update_component(component_id: str, payload: ComponentUpdate, db: Session = 
               "verification_status": component.verification_status}
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(component, field, value)
+    # Bellows/Shroud are the only two component types with a real manufacturing formula (see
+    # app.services.calc_engine_service) - recompute it on EVERY edit, not just calc_inputs
+    # changes, so editing the extracted OD/thickness in `dimensions` (the Size field) also
+    # updates the calculation automatically, with no separate "Calculate" step. A component
+    # that isn't Bellows/Shroud, or doesn't yet have enough inputs, is left untouched.
+    calc_result = compute_bellows_or_shroud_result(component)
+    if calc_result is not None:
+        component.calc_spec_identifier = calc_result["spec_identifier"]
+        component.calc_result = calc_result
     db.add(AuditLog(entity_type="component", entity_id=component_id, action="updated",
                      details={"before": before, "after": payload.model_dump(exclude_unset=True)},
                      actor=current_user.email))

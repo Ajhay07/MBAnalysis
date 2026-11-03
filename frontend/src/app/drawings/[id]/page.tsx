@@ -40,6 +40,40 @@ function formatSizeText(dimensions: Record<string, unknown> | null | undefined):
   return parts.join("  ");
 }
 
+// Client-side mirror of engineering_engine.routing.registry's BELLOWS/SHROUD alias match - only
+// these two component types have a real manufacturing formula (see
+// app.services.calc_engine_service.compute_bellows_or_shroud_result), so only they get the
+// editable Calc Inputs field. Good enough as a UI gate (the backend is the real authority and
+// simply does nothing for any other component type); doesn't need to be exact.
+function isBellowsOrShroud(description: string): boolean {
+  const d = description.toUpperCase();
+  return d.includes("BELLOW") || d.includes("SHROUD");
+}
+
+// calc_inputs as "key=value key=value" text, editable in one field rather than one input per
+// parameter - e.g. "od=559 num_plies=1 ply_thickness_mm=0.6". Mirrors how Size already edits
+// `dimensions` as one free-text field. Recognized keys (see compute_bellows_or_shroud_result):
+// od, thickness, width (override an extracted/reference value), num_plies, ply_thickness_mm,
+// pitch_mm, convolution_depth_mm, number_of_convolutions (feed the width formula when no width
+// is already known).
+function formatCalcInputsText(calcInputs: Record<string, unknown> | null | undefined): string {
+  if (!calcInputs) return "";
+  return Object.entries(calcInputs)
+    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ");
+}
+function parseCalcInputsText(text: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const token of text.trim().split(/\s+/)) {
+    const [key, raw] = token.split("=");
+    if (!key || raw === undefined) continue;
+    const value = parseFloat(raw);
+    if (!Number.isNaN(value)) out[key] = value;
+  }
+  return out;
+}
+
 function OcrOverlay({
   evidence,
   selected,
@@ -620,10 +654,27 @@ export default function DrawingViewerPage() {
                                 }}
                               />
                             </div>
+                            {isBellowsOrShroud(c.description) && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="text-xs text-steel w-9 shrink-0" title="Overrides for the Bellows/Shroud formula, e.g. od=559 num_plies=1 ply_thickness_mm=0.6 - editing this recalculates automatically.">Calc:</span>
+                                <input
+                                  type="text"
+                                  className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1 font-mono"
+                                  placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
+                                  defaultValue={formatCalcInputsText(c.calc_inputs)}
+                                  onBlur={(e) => {
+                                    const text = e.target.value.trim();
+                                    if (text !== formatCalcInputsText(c.calc_inputs)) {
+                                      updateComponent(c, { calc_inputs: parseCalcInputsText(text) });
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
                             {c.calc_result && (
-                              // Computed automatically (Bellows/Shroud only - see
-                              // app.services.calc_engine_service) when this drawing's indent was
-                              // last generated. No manual step here; this is read-only.
+                              // Recalculated automatically on every edit above (Calc Inputs,
+                              // Size, Material - see app.services.calc_engine_service /
+                              // app.routers.analyses.update_component). Read-only here.
                               <div className="flex items-center gap-1.5 mt-1.5">
                                 <CalcResultBadge result={c.calc_result} />
                                 <span className="text-xs text-steel-light">
@@ -757,21 +808,36 @@ export default function DrawingViewerPage() {
                               )}
                             </td>
                             <td className="td !px-2">
-                              {c.calc_result ? (
-                                // Computed automatically (Bellows/Shroud only) when this
-                                // drawing's indent was last generated - read-only here.
+                              {isBellowsOrShroud(c.description) ? (
                                 <>
-                                  <CalcResultBadge result={c.calc_result} />
-                                  <div className="text-xs text-steel-light mt-1 whitespace-nowrap">
-                                    {Object.entries(c.calc_result.final_proposed_dimensions || {})
-                                      .filter(([, v]) => v !== null && v !== undefined)
-                                      .map(([k, v]) => `${k}: ${v}`)
-                                      .join("  ·  ")}
-                                  </div>
+                                  <input
+                                    type="text"
+                                    className="input !w-40 !py-0.5 !px-1.5 !text-xs font-mono"
+                                    placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
+                                    defaultValue={formatCalcInputsText(c.calc_inputs)}
+                                    title="Overrides for the Bellows/Shroud formula - editing recalculates automatically."
+                                    onBlur={(e) => {
+                                      const text = e.target.value.trim();
+                                      if (text !== formatCalcInputsText(c.calc_inputs)) {
+                                        updateComponent(c, { calc_inputs: parseCalcInputsText(text) });
+                                      }
+                                    }}
+                                  />
+                                  {c.calc_result && (
+                                    <div className="mt-1">
+                                      <CalcResultBadge result={c.calc_result} />
+                                      <div className="text-xs text-steel-light mt-1 whitespace-nowrap">
+                                        {Object.entries(c.calc_result.final_proposed_dimensions || {})
+                                          .filter(([, v]) => v !== null && v !== undefined)
+                                          .map(([k, v]) => `${k}: ${v}`)
+                                          .join("  ·  ")}
+                                      </div>
+                                    </div>
+                                  )}
                                 </>
                               ) : (
-                                <span className="text-xs text-steel-light" title="Only Bellows/Shroud get a calculated value, and only after an indent has been generated for this drawing.">
-                                  —
+                                <span className="text-xs text-steel-light" title="Only Bellows/Shroud have a calculated value.">
+                                  n/a
                                 </span>
                               )}
                             </td>

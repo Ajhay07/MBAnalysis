@@ -97,36 +97,69 @@ def compute_bellows_or_shroud_result(component) -> dict | None:
     """Returns an engine-computed result dict for a Bellows or Shroud component, or None for
     anything else (including a Bellows/Shroud the engine couldn't compute enough of - callers
     fall back to the plain extracted-dimensions display in that case, same as every other
-    component type). Never raises - a missing input just means fewer fields in the result."""
+    component type). Never raises - a missing input just means fewer fields in the result.
+
+    Called automatically on every component edit (app.routers.analyses.update_component), not
+    just once - so a reviewer editing calc_inputs or the extracted dimensions always sees the
+    calculation reflect their latest edit, with no separate recalculate step. calc_inputs always
+    wins over whatever was OCR-extracted into `dimensions`, letting a reviewer override a bad
+    OCR reading (e.g. a wrong OD) without touching the raw extraction evidence."""
     spec = classify_component(component.description or "")
     if spec is None or spec.identifier not in ("BELLOWS", "SHROUD"):
         return None
 
     dims = component.dimensions or {}
-    od = parse_numeric(dims.get("od"))
-    width = parse_numeric(dims.get("width"))
+    manual = component.calc_inputs or {}
+    od = parse_numeric(manual.get("od")) if manual.get("od") is not None else parse_numeric(dims.get("od"))
 
     if spec.identifier == "BELLOWS":
         length_result = bellows_calculator.calculate_blank_length(od)
-        num_plies, ply_thickness = parse_bellows_ply_text(component.source_text, component.assumption_text)
+        num_plies, ply_thickness = (manual.get("num_plies"), parse_numeric(manual.get("ply_thickness_mm")))
+        if num_plies is None or ply_thickness is None:
+            # Falls back to parsing a "<N>ply x <X>mm" CAD callout out of this component's own
+            # OCR'd text when the reviewer hasn't typed num_plies/ply_thickness_mm by hand.
+            parsed_plies, parsed_thickness = parse_bellows_ply_text(component.source_text, component.assumption_text)
+            num_plies = num_plies if num_plies is not None else parsed_plies
+            ply_thickness = ply_thickness if ply_thickness is not None else parsed_thickness
         thickness_result = bellows_calculator.calculate_thickness(num_plies, ply_thickness)
         results = {"length": length_result, "thickness": thickness_result}
+
+        # Width: an already-extracted/reference width (printed on the BOM table or indent) is
+        # used as-is, per "do not recalculate dimensions already provided" - the sheet-width
+        # FORMULA (pitch + convolution depth + convolution count, none reliably OCR-extractable)
+        # only runs when no such value is already known, and only from explicit manual input,
+        # never guessed.
+        width_value = parse_numeric(manual.get("width")) if manual.get("width") is not None else parse_numeric(dims.get("width"))
+        if width_value is not None:
+            results["width"] = DimensionResult(
+                name="width", value=width_value, unit="mm", status=DimensionStatus.VERIFIED,
+                component="Bellows", extraction_method="ocr_detail_panel",
+            )
+        else:
+            pitch = parse_numeric(manual.get("pitch_mm"))
+            depth = parse_numeric(manual.get("convolution_depth_mm"))
+            n = manual.get("number_of_convolutions")
+            n = int(n) if isinstance(n, (int, float)) and n == int(n) else None
+            results["width"] = bellows_calculator.calculate_sheet_width(pitch, depth, n)
     else:  # SHROUD
         base_length = shroud_calculator.calculate_base_circumference(od)
         length_result = shroud_calculator.calculate_final_length(base_length.value)
-        thickness_value = parse_numeric(dims.get("thk"))
+        thickness_value = (
+            parse_numeric(manual.get("thickness")) if manual.get("thickness") is not None
+            else parse_numeric(dims.get("thk"))
+        )
         thickness_result = (
             DimensionResult(name="thickness", value=thickness_value, unit="mm", status=DimensionStatus.VERIFIED,
                              component="Shroud", extraction_method="ocr_detail_panel")
             if thickness_value is not None else missing("thickness", "Shroud")
         )
         results = {"length": length_result, "thickness": thickness_result}
-
-    if width is not None:
-        results["width"] = DimensionResult(
-            name="width", value=width, unit="mm", status=DimensionStatus.VERIFIED,
-            component=spec.identifier.title(), extraction_method="ocr_detail_panel",
-        )
+        width_value = parse_numeric(manual.get("width")) if manual.get("width") is not None else parse_numeric(dims.get("width"))
+        if width_value is not None:
+            results["width"] = DimensionResult(
+                name="width", value=width_value, unit="mm", status=DimensionStatus.VERIFIED,
+                component="Shroud", extraction_method="ocr_detail_panel",
+            )
 
     if all(r.status == DimensionStatus.MISSING for r in results.values()):
         return None  # nothing computable - let the caller fall back to plain extracted dimensions
