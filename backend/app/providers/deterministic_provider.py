@@ -64,6 +64,23 @@ _MATERIAL_KEYWORDS = [
     "inconel", "hastelloy", "ms plate", "carbon steel", "galvanized", "galvanised",
 ]
 
+# ASTM ("A ###") and Indian Standard ("IS ####") material designations - these show up on every
+# MB drawing's BOM table (A 240 TYP 304, A 516 Gr.70, IS 2062 E250 Gr.BR, IS 1367 CL 6.8, ...)
+# but match neither the colloquial keyword list above nor _MATERIAL_RE (which needs an explicit
+# "MATERIAL:"-style label on the same line, never a bare standard number in running text).
+# Deliberately permissive about what follows the base "A ###"/"IS ####" code - a grade code
+# ("E250"), TYP/Gr./CL suffix with or without the period real drawings are inconsistent about,
+# and an optional trailing "/ 6.0" (seen on "CL 6.8 / 6.0") - but the base code alone is enough
+# for _parse_materials to report the spec as present, even when the exact suffix can't be
+# fully captured.
+_ENGINEERING_STEEL_RE = re.compile(
+    r"\b(?:A|IS)\s?\d{3,4}"
+    r"(?:\s+[A-Z]\d{2,4})?"
+    r"(?:\s*(?:TYP|GR|CL)\.?\s?[A-Z0-9.]+)?"
+    r"(?:\s*/\s*\d+(?:\.\d+)?)?",
+    re.IGNORECASE,
+)
+
 
 # "QUANTITY" / "SIZE ( NB )" labels sit on their own line, with the value 1-3 lines below
 # (see the real title-block text dump for WO-9374-family drawings: "QUANTITY\n08 Nos.\n...").
@@ -213,6 +230,14 @@ def _parse_materials(ocr_text: str) -> list[str]:
             value = m.group(1).strip().rstrip(",.")
             if value and value not in found:
                 found.append(value)
+    # Bare ASTM/IS standard designations in running text (A 240 TYP 304, IS 2062 E250 Gr.BR,
+    # ...) - no "MATERIAL:" label needed, see _ENGINEERING_STEEL_RE's own docstring. Scanned
+    # over the whole text (not line-by-line) since a BOM table's material cell can legitimately
+    # wrap, unlike the label-anchored patterns above.
+    for m in _ENGINEERING_STEEL_RE.finditer(ocr_text):
+        value = re.sub(r"\s+", " ", m.group(0)).strip().rstrip(",.")
+        if value and value not in found:
+            found.append(value)
     return found
 
 

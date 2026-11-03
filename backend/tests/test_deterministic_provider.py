@@ -95,6 +95,26 @@ def test_missing_quantity_and_nb_fields_stay_none_not_guessed(monkeypatch):
     assert result.title_block.nb_size_mm is None
 
 
+def test_bare_astm_and_is_material_designations_parsed_without_a_label(monkeypatch):
+    """Real MB BOM-table material cells (A 240 TYP 304, IS 2062 E250 Gr.BR, IS 1367 CL 6.8,
+    A 516 Gr.70) are bare running text with no "MATERIAL:" label on the same line - _MATERIAL_RE
+    alone (label-anchored) never catches these; _ENGINEERING_STEEL_RE does."""
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)
+    ocr_text = (
+        "A 240 TYP 304\n"
+        "IS 2062 E250 Gr.BR\n"
+        "IS 1367 CL 6.8\n"
+        "A 516 Gr.70\n"
+    )
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text=ocr_text, drawing_number="DWG-6")
+    assert "A 240 TYP 304" in result.materials
+    assert "IS 2062 E250 Gr.BR" in result.materials
+    assert "IS 1367 CL 6.8" in result.materials
+    assert "A 516 Gr.70" in result.materials
+
+
 def test_wo_number_parsed_from_title_block(monkeypatch):
     """The real WO-9374-family drawings print "WO No. 9374" as a free-standing note - this
     feeds the frontend's auto-filled Generate Indent Sheet form (wo_number), same as

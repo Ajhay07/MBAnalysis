@@ -271,6 +271,30 @@ def test_transposed_table_ignores_a_distant_unrelated_quantity_field_for_qty():
     assert all(row.qty == "" for row in table.rows)
 
 
+def test_wider_mid_table_gap_on_a_long_item_list_does_not_truncate_the_tail():
+    # Regression: the OLD fixed TRANSPOSED_RUN_GAP_PX=50 hard-`break`-ed at the first gap over
+    # 50px, silently discarding every item after it - fine for a short, tightly-packed table,
+    # wrong for a real 10-15 item WO-9374-style BOM where one inter-item gap mid-table (e.g.
+    # between a visual group boundary) can genuinely run a bit wider than 50px while still being
+    # part of the SAME table. 15 items, consistent ~18px gaps throughout except one deliberate
+    # 52px gap between item 5 and item 6 (just past the OLD fixed cutoff) - all 15 must still
+    # come through, not just the first 5.
+    desc_y = 1800
+    regions = [_region("DESCRIPTION", 390, desc_y, w=25, h=110)]
+    x = 415
+    names = [f"ITEM{i}" for i in range(1, 16)]
+    for i, name in enumerate(names):
+        gap = 52 if i == 5 else 18  # the wider (but still genuine) gap right after item 5
+        x += gap
+        regions.append(_region(name, x, desc_y, w=20, h=90))
+        x += 20
+    table = extract_bom_table(regions)
+    assert table is not None
+    descriptions = {row.description for row in table.rows}
+    assert descriptions == set(names)
+    assert len(table.rows) == 15
+
+
 def test_tight_run_gap_excludes_a_nearby_unrelated_panel_label():
     # Regression: a real production drawing (3I/26160A) had real BOM items 13-18px apart, and
     # an unrelated "COLLAR DETAIL" panel-label region sitting only 86px past the last real item

@@ -106,17 +106,33 @@ _LABEL_STRIP_SLACK_PX = 60
 
 
 def _contiguous_x_run(candidates: list, start_x: float) -> list:
-    """candidates sorted by x-position, keeping a contiguous run starting near start_x and
-    cutting at the first gap wider than TRANSPOSED_RUN_GAP_PX. Used to isolate one title-block
-    sub-table's cells from an unrelated block of text sharing the same page/row band."""
+    """candidates sorted by x-position, keeping a contiguous run starting near start_x. Used to
+    isolate one title-block sub-table's cells (e.g. a 10-15 item BOM) from an unrelated block of
+    text sharing the same page/row band (e.g. a spec-parameters "QUANTITY" field, or a nearby
+    "COLLAR DETAIL" panel label).
+
+    The cutoff is DYNAMIC, not a single fixed pixel constant: a gap is only treated as "this
+    run has ended" when it's both over the TRANSPOSED_RUN_GAP_PX floor AND clearly anomalous
+    relative to the item-to-item spacing this run has itself established so far (> 3x the
+    largest gap already accepted). A fixed global constant tuned against one drawing's spacing
+    (13-18px on WO-3I/26160A) previously hard-`break`-ed on the first gap past that value - which
+    silently discarded every item after it on a longer table (confirmed: WO 9374-family BOM
+    tables run 10-15 items, where even one somewhat wider-than-usual but still genuine
+    inter-item gap mid-table would wrongly truncate everything to its right). This still rejects
+    a true outlier (a gap sharply bigger than anything seen so far in this run) exactly as
+    before - it just no longer mistakes "wider than this run's typical gap" for "unrelated"."""
     ordered = sorted(candidates, key=lambda r: _x_center(r.bbox))
     run: list = []
+    gaps: list[float] = []
     prev_x1 = start_x
     for region in ordered:
         x0, x1 = _x_span(region.bbox)
-        if x0 - prev_x1 > TRANSPOSED_RUN_GAP_PX:
+        gap = x0 - prev_x1
+        cutoff = max(TRANSPOSED_RUN_GAP_PX, (max(gaps) if gaps else 0) * 3.0)
+        if gap > cutoff:
             break
         run.append(region)
+        gaps.append(gap)
         prev_x1 = x1
     return run
 
