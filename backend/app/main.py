@@ -84,3 +84,4 @@ def health():
         # can still fail independently; see app/services/paddle_ocr.py's own logging for that).
         "paddleocr_importable": PaddleOCR is not None,
     }
+
