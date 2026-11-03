@@ -654,6 +654,25 @@ export default function DrawingViewerPage() {
                                 }}
                               />
                             </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-xs text-steel w-9 shrink-0">Qty:</span>
+                              <input
+                                type="number"
+                                step="any"
+                                className="input !w-20 !py-0.5 !px-1.5 !text-xs"
+                                defaultValue={c.quantity}
+                                title="Quantity per assembly - editing this confirms it (clears the 'quantity could not be read' flag on any indent generated from it)."
+                                onBlur={(e) => {
+                                  const value = parseFloat(e.target.value);
+                                  if (!Number.isNaN(value) && value !== c.quantity) updateComponent(c, { quantity: value });
+                                }}
+                              />
+                              {c.quantity_basis === "assumed" && (
+                                <span className="text-xs text-amber-600" title="Could not be read from the drawing's BOM table - this is a placeholder, not a confirmed reading.">
+                                  unconfirmed
+                                </span>
+                              )}
+                            </div>
                             {isBellowsOrShroud(c.description) && (
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className="text-xs text-steel w-9 shrink-0" title="Overrides for the Bellows/Shroud formula, e.g. od=559 num_plies=1 ply_thickness_mm=0.6 - editing this recalculates automatically.">Calc:</span>
@@ -686,7 +705,7 @@ export default function DrawingViewerPage() {
                               </div>
                             )}
                             <div className="text-xs text-steel mt-1">
-                              {c.category} &middot; Qty {c.quantity}
+                              {c.category}
                               {pageCount > 1 && (
                                 <>
                                   {" "}&middot;{" "}
@@ -795,7 +814,22 @@ export default function DrawingViewerPage() {
                                 }}
                               />
                             </td>
-                            <td className="td !px-2 text-right">{c.quantity}</td>
+                            <td className="td !px-2 text-right">
+                              <input
+                                type="number"
+                                step="any"
+                                className="input !w-16 !py-0.5 !px-1.5 !text-xs text-right"
+                                defaultValue={c.quantity}
+                                title="Quantity per assembly - editing this confirms it."
+                                onBlur={(e) => {
+                                  const value = parseFloat(e.target.value);
+                                  if (!Number.isNaN(value) && value !== c.quantity) updateComponent(c, { quantity: value });
+                                }}
+                              />
+                              {c.quantity_basis === "assumed" && (
+                                <div className="text-xs text-amber-600 whitespace-nowrap">unconfirmed</div>
+                              )}
+                            </td>
                             <td className="td !px-2"><MakeBuyBadge value={c.make_buy} /></td>
                             <td className="td !px-2">
                               {cat ? (

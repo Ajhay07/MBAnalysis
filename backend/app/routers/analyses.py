@@ -15,12 +15,31 @@ router = APIRouter(prefix="/api/analyses", tags=["analyses"])
 editor = require_role("admin", "engineer")
 
 
+def _refresh_bellows_shroud_calc_results(db: Session, components: list[Component]) -> bool:
+    """Keeps calc_result current for every Bellows/Shroud component without needing a prior
+    edit or indent generation - called on every analysis read, not just a write path, so simply
+    opening a drawing shows the calculation. Cheap (pure-Python formulas, no I/O) and a no-op
+    for any component that isn't Bellows/Shroud or has nothing computable yet. Returns whether
+    anything changed, so the caller only commits when it actually needs to."""
+    changed = False
+    for component in components:
+        calc_result = compute_bellows_or_shroud_result(component)
+        if calc_result is not None and calc_result != (component.calc_result or None):
+            component.calc_spec_identifier = calc_result["spec_identifier"]
+            component.calc_result = calc_result
+            changed = True
+    return changed
+
+
 @router.get("/{analysis_id}", response_model=AnalysisOut)
 def get_analysis(analysis_id: str, db: Session = Depends(get_db),
                   current_user: User = Depends(get_current_user)):
     analysis = db.query(Analysis).get(analysis_id)
     if not analysis:
         raise HTTPException(404, "Analysis not found")
+    if _refresh_bellows_shroud_calc_results(db, analysis.components):
+        db.commit()
+        db.refresh(analysis)
     return analysis
 
 
@@ -32,8 +51,15 @@ def update_component(component_id: str, payload: ComponentUpdate, db: Session = 
         raise HTTPException(404, "Component not found")
     before = {"make_buy": component.make_buy.value if hasattr(component.make_buy, "value") else component.make_buy,
               "verification_status": component.verification_status}
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    for field, value in fields.items():
         setattr(component, field, value)
+    if "quantity" in fields:
+        # A reviewer typing in the quantity by hand IS a confirmed reading now, whatever it was
+        # before (including the OCR pipeline's own "assumed" fallback of 1 when the BOM table's
+        # QTY cell couldn't be read - see app.services.indent_service, which flags an indent
+        # line for confirmation specifically when quantity_basis is still "assumed").
+        component.quantity_basis = "explicit_callout"
     # Bellows/Shroud are the only two component types with a real manufacturing formula (see
     # app.services.calc_engine_service) - recompute it on EVERY edit, not just calc_inputs
     # changes, so editing the extracted OD/thickness in `dimensions` (the Size field) also
