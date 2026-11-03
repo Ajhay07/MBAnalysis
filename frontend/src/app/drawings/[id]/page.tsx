@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Scan, RotateCcw, RotateCw, Maximize2, ClipboardList, Download, AlertTriangle } from "lucide-react";
 import { api, Drawing, Analysis, Bom, BomTree, drawingFileUrl, drawingPagePreviewUrl, Component, BomLineItem, JobRecord, OcrPageEvidence, OcrRegion, ReferenceBomResponse, Indent, indentPdfUrl } from "@/lib/api";
-import { StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge } from "@/components/Badges";
+import { StatusBadge, MakeBuyBadge, QuantityBasisBadge, AssumptionNote, CatalogMatchBadge, StockAvailabilityBadge, CalcResultBadge } from "@/components/Badges";
 import BomPanel from "@/components/BomPanel";
 import InventoryAvailabilityPanel from "@/components/InventoryAvailabilityPanel";
 import ReferenceBomPanel from "@/components/ReferenceBomPanel";
@@ -103,6 +103,7 @@ export default function DrawingViewerPage() {
   const [selectedRegion, setSelectedRegion] = useState<OcrRegion | null>(null);
   const [referenceBom, setReferenceBom] = useState<ReferenceBomResponse | null>(null);
   const [catalogById, setCatalogById] = useState<Record<string, any>>({});
+  const [calcErrorByComponent, setCalcErrorByComponent] = useState<Record<string, string>>({});
   const [allDrawings, setAllDrawings] = useState<Drawing[]>([]);
   const [tab, setTab] = useState<"info" | "components" | "bom">("info");
   // Single-action indent workflow: the user just wants "upload -> Indent Sheet", not a
@@ -262,6 +263,16 @@ export default function DrawingViewerPage() {
   async function updateComponent(c: Component, patch: Partial<Component>) {
     await api.updateComponent(c.id, patch);
     load();
+  }
+
+  async function calculateComponent(c: Component) {
+    setCalcErrorByComponent((prev) => ({ ...prev, [c.id]: "" }));
+    try {
+      await api.calculateComponent(c.id);
+      load();
+    } catch (e: any) {
+      setCalcErrorByComponent((prev) => ({ ...prev, [c.id]: e.message || "Calculation failed." }));
+    }
   }
 
   async function updateBomLineItem(lineItemId: string, patch: Partial<BomLineItem>) {
@@ -619,6 +630,38 @@ export default function DrawingViewerPage() {
                                 }}
                               />
                             </div>
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <button
+                                className="text-xs px-2 py-0.5 border border-border rounded-industrial hover:bg-steel/10"
+                                onClick={() => calculateComponent(c)}
+                                title="Classify this component and run it through the engineering calculation engine, using the manual readings in Size/Material above plus calc_inputs."
+                              >
+                                Calculate
+                              </button>
+                              {c.calc_result && (
+                                <CalcResultBadge result={c.calc_result} />
+                              )}
+                            </div>
+                            {calcErrorByComponent[c.id] && (
+                              <div className="text-xs text-red-600 mt-1">{calcErrorByComponent[c.id]}</div>
+                            )}
+                            {c.calc_result && c.calc_result.status !== "UNCLASSIFIED" && (
+                              <div className="text-xs text-steel-light mt-1 space-y-0.5">
+                                {Object.entries(c.calc_result.final_proposed_dimensions || {}).map(([k, v]) => (
+                                  <div key={k}>
+                                    {k}: {v === null || v === undefined ? "—" : String(v)}
+                                  </div>
+                                ))}
+                                {(c.calc_result.missing_inputs?.length ?? 0) > 0 && (
+                                  <div className="text-amber-600">
+                                    Missing: {c.calc_result.missing_inputs!.join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {c.calc_result?.status === "UNCLASSIFIED" && (
+                              <div className="text-xs text-steel-light mt-1">{c.calc_result.message}</div>
+                            )}
                             <div className="text-xs text-steel mt-1">
                               {c.category} &middot; Qty {c.quantity}
                               {pageCount > 1 && (

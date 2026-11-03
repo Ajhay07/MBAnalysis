@@ -152,6 +152,17 @@ class Component(Base):
     # CatalogComponent closely enough. Never fabricated - null means no confident match.
     catalog_component_id = Column(String, ForeignKey("catalog_components.id"), nullable=True)
     catalog_match_score = Column(Float, nullable=True)
+    # Engineering calculation engine integration (backend/engineering_engine) - additive, never
+    # overwrites `dimensions` (the raw OCR/CAD-extracted evidence). calc_inputs is what a
+    # reviewer types in by hand (thickness, ply count, pitch/depth, etc. - whatever this
+    # component's registry spec needs and extraction can't reliably supply). calc_result is the
+    # engine's own output after running the matching calculator: computed dimensions plus, per
+    # field, its formula/inputs/status - recomputed and overwritten every time calc_inputs (or
+    # the underlying extracted `dimensions`) changes, never accumulated/merged across runs, so
+    # it's always exactly what the current calculator would produce for the current inputs.
+    calc_spec_identifier = Column(String, nullable=True)  # which engineering_engine.routing registry spec this classified as, or null
+    calc_inputs = Column(JSON, default=dict)
+    calc_result = Column(JSON, default=dict)
 
     analysis = relationship("Analysis", back_populates="components")
 

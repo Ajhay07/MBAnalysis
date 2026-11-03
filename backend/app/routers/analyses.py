@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.models import Analysis, Component, AuditLog, Bom, User
 from app.schemas.api import AnalysisOut, ComponentOut, ComponentUpdate, BomOut
 from app.services.bom_service import generate_bom_from_analysis
+from app.services.calc_engine_service import run_component_calculation
 
 router = APIRouter(prefix="/api/analyses", tags=["analyses"])
 
@@ -35,6 +36,28 @@ def update_component(component_id: str, payload: ComponentUpdate, db: Session = 
         setattr(component, field, value)
     db.add(AuditLog(entity_type="component", entity_id=component_id, action="updated",
                      details={"before": before, "after": payload.model_dump(exclude_unset=True)},
+                     actor=current_user.email))
+    db.commit()
+    db.refresh(component)
+    return component
+
+
+@router.post("/components/{component_id}/calculate", response_model=ComponentOut)
+def calculate_component(component_id: str, db: Session = Depends(get_db),
+                         current_user: User = Depends(editor)):
+    """Runs this component through the engineering_engine (classification + the matching
+    calculator), using its current calc_inputs as manual readings, and persists the result on
+    calc_spec_identifier/calc_result. Never 404s into a calculation failure - an unclassified
+    or missing-input component still gets a result dict (status UNCLASSIFIED/MISSING/etc.),
+    same convention the engine itself uses rather than raising."""
+    component = db.query(Component).get(component_id)
+    if not component:
+        raise HTTPException(404, "Component not found")
+    result = run_component_calculation(component)
+    component.calc_spec_identifier = result.get("spec_identifier")
+    component.calc_result = result
+    db.add(AuditLog(entity_type="component", entity_id=component_id, action="calculated",
+                     details={"spec_identifier": component.calc_spec_identifier, "status": result.get("status")},
                      actor=current_user.email))
     db.commit()
     db.refresh(component)

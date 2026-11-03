@@ -51,6 +51,14 @@ class ComponentOut(BaseModel):
     assumption_text: str | None = None
     catalog_component_id: str | None = None
     catalog_match_score: float | None = None
+    # Engineering calculation engine integration (backend/engineering_engine) - see
+    # app.models.models.Component and app.services.calc_engine_service. calc_spec_identifier is
+    # which engineering_engine.routing registry spec this classified as (or null if
+    # unclassified); calc_inputs is a reviewer's manual readings; calc_result is the engine's
+    # own last-computed output, overwritten every time the component is recalculated.
+    calc_spec_identifier: str | None = None
+    calc_inputs: dict | None = None
+    calc_result: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -88,6 +96,11 @@ class ComponentUpdate(BaseModel):
     # formatSizeText (frontend) both already render a bare "size" key as-is, same convention
     # deterministic_provider uses when the BOM table itself carries a SIZE cell.
     dimensions: dict | None = None
+    # Manual readings for the engineering_engine calculation (e.g. {"thickness": 10}) and an
+    # explicit override of which registry spec to use - see app.services.calc_engine_service.
+    # Setting either does NOT run the calculation itself; call the /calculate endpoint for that.
+    calc_inputs: dict | None = None
+    calc_spec_identifier: str | None = None
 
 
 class BomLineItemOut(BaseModel):

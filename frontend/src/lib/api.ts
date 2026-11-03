@@ -104,6 +104,41 @@ export interface Component {
   // confident match - never implies one.
   catalog_component_id?: string | null;
   catalog_match_score?: number | null;
+  // Engineering calculation engine integration (backend/engineering_engine via
+  // app.services.calc_engine_service). calc_spec_identifier is which registry spec this
+  // classified as (null if unclassified); calc_inputs is the reviewer's manual readings fed
+  // into the calculator; calc_result is the engine's own last-computed output - see
+  // CalcEngineResult below for its shape. Running the calculation itself is a POST to
+  // /api/analyses/components/{id}/calculate (api.calculateComponent), not a PATCH.
+  calc_spec_identifier?: string | null;
+  calc_inputs?: Record<string, unknown> | null;
+  calc_result?: CalcEngineResult | null;
+}
+
+// Mirrors engineering_engine.output.indent_generator.ComponentOutput.to_dict() (success case)
+// or the UNCLASSIFIED short-circuit from app.services.calc_engine_service (failure case).
+export interface CalcEngineResult {
+  spec_identifier?: string | null;
+  status: string; // "VERIFIED" | "CALCULATED" | "REVIEW_REQUIRED" | "MISSING" | "UNCLASSIFIED"
+  message?: string;
+  name?: string;
+  material?: string;
+  final_proposed_dimensions?: Record<string, number | string | null>;
+  dimensions_by_source?: Record<string, Record<string, number | string | null>>;
+  reference_indent_dimensions?: Record<string, number | string> | null;
+  dimension_detail?: Record<string, {
+    value: number | string | null;
+    unit: string;
+    status: string;
+    extraction_method: string;
+    formula: string | null;
+    notes: string | null;
+  }>;
+  quantity_per_assembly?: number | null;
+  total_quantity?: number | null;
+  quantity_discrepancy?: boolean;
+  missing_inputs?: string[];
+  notes?: string[] | null;
 }
 
 export interface Analysis {
@@ -378,6 +413,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  calculateComponent: (id: string) =>
+    request<Component>(`/api/analyses/components/${id}/calculate`, { method: "POST" }),
   approveAnalysis: (id: string) => request<{ ok: boolean }>(`/api/analyses/${id}/approve`, { method: "POST" }),
   generateBom: (analysisId: string) =>
     request<Bom>(`/api/analyses/${analysisId}/generate-bom`, { method: "POST" }),

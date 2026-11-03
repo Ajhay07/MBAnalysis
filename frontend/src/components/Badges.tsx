@@ -61,6 +61,26 @@ const AVAILABILITY_LABELS: Record<string, string> = {
   REVIEW_REQUIRED: "Review Required",
 };
 
+// Status values from engineering_engine.validation.dimension_validator.DimensionStatus, plus
+// UNCLASSIFIED from app.services.calc_engine_service - see CalcEngineResult in lib/api.ts.
+const CALC_RESULT_STYLES: Record<string, string> = {
+  VERIFIED: "bg-emerald-100 text-emerald-800",
+  CALCULATED: "bg-blue-100 text-blue-700",
+  REVIEW_REQUIRED: "bg-amber-100 text-amber-800",
+  MISSING: "bg-gray-100 text-gray-600",
+  UNCLASSIFIED: "bg-red-100 text-red-700",
+};
+
+export function CalcResultBadge({ result }: { result: { status: string; spec_identifier?: string | null } }) {
+  const cls = CALC_RESULT_STYLES[result.status] || "bg-gray-100 text-gray-600";
+  const label = result.spec_identifier ? `${result.spec_identifier}: ${result.status}` : result.status;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
 export function AvailabilityBadge({ status }: { status: string }) {
   const cls = AVAILABILITY_STYLES[status] || "bg-gray-100 text-gray-600";
   return (
