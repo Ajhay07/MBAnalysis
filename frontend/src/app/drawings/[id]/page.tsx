@@ -257,9 +257,16 @@ export default function DrawingViewerPage() {
 
   /** The BOM a real indent needs always exists by the time this runs, but the user never has
    * to click a separate "Generate BOM" button to get there - this reuses the current one (any
-   * BOM already generated for this analysis) or generates it silently on demand. */
+   * BOM already generated for THIS analysis) or generates it silently on demand.
+   *
+   * Regression fix: this used to reuse `bom` whenever one existed at all, with no check that it
+   * came from the CURRENT analysis - so re-running analysis (e.g. after a drawing-extraction
+   * fix) never refreshed the BOM an indent actually gets built from, silently feeding every
+   * subsequent indent stale data (wrong quantities, missing dimensions, ...) forever, however
+   * many times the analysis itself was redone. Now regenerates whenever bom.analysis_id doesn't
+   * match the active analysis, not just when there's no BOM at all. */
   async function ensureBom(): Promise<Bom> {
-    if (bom) return bom;
+    if (bom && bom.analysis_id === activeAnalysis?.id) return bom;
     if (!activeAnalysis) throw new Error("No analysis to generate a BOM from yet.");
     const generated = await api.generateBom(activeAnalysis.id);
     setBomMsg(`BOM v${generated.version} generated with ${generated.line_items.length} line items.`);
@@ -933,6 +940,36 @@ export default function DrawingViewerPage() {
             {tab === "bom" && (
               <>
                 {bomMsg && <div className="mb-3 text-sm text-emerald-700">{bomMsg}</div>}
+                {bom && activeAnalysis && bom.analysis_id !== activeAnalysis.id && (
+                  // The analysis has moved on (re-run, or a newer version) since this BOM was
+                  // built - e.g. after a drawing-extraction fix got a better quantity/dimension
+                  // read, re-running analysis alone never touches an already-generated BOM, so
+                  // without this it would keep showing stale data indefinitely with no visible
+                  // sign anything was wrong. See ensureBom()'s own fix for the indent-generation
+                  // side of this same staleness bug.
+                  <div className="mb-3 flex items-center justify-between gap-3 border border-amber-300 bg-amber-50 rounded-industrial px-3 py-2 text-sm">
+                    <span className="text-amber-800">
+                      This BOM was generated from an earlier analysis. Re-run Analysis results since then aren&apos;t reflected here yet.
+                    </span>
+                    <button
+                      className="btn-accent !py-1 !px-3 !text-xs shrink-0"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          const generated = await api.generateBom(activeAnalysis.id);
+                          setBomMsg(`BOM v${generated.version} generated with ${generated.line_items.length} line items.`);
+                          setBom(generated);
+                          setBomTree(await api.getBomTree(generated.id));
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Refresh BOM
+                    </button>
+                  </div>
+                )}
                 {bom ? (
                   <>
                     <BomPanel bom={bom} tree={bomTree} onUpdate={updateBomLineItem} />
