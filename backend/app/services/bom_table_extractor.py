@@ -103,6 +103,12 @@ TRANSPOSED_RUN_GAP_PX = 50
 # same narrow left strip). Anything further is almost certainly an unrelated same-named field
 # elsewhere on the page (e.g. a design-spec-parameters "QUANTITY" box), not this table's own QTY.
 _LABEL_STRIP_SLACK_PX = 60
+# How far below the MATERIAL label's own top edge a wrapped material callout's later lines can
+# still sit and be treated as part of the same cell (see the MATERIAL-matching block in
+# _extract_transposed_bom_table). Measured generously against a real production drawing's own
+# multi-line material text, but always clamped below the QTY row's own top edge when found -
+# this constant alone is only the fallback when no QTY row was located.
+MATERIAL_WRAP_BAND_PX = 300
 
 
 def _contiguous_x_run(candidates: list, start_x: float) -> list:
@@ -182,32 +188,52 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
             for alias in HEADER_TOKENS["material"]
         )
     ]
-    material_by_item: dict[int, str] = {}
-    if material_label_candidates:
-        material_label = min(
-            material_label_candidates,
-            key=lambda r: abs(_x_center(r.bbox) - _x_center(description_label.bbox)),
-        )
-        material_value_candidates = [
-            r for r in regions
-            if r is not material_label
-            and r not in item_regions
-            and r is not description_label
-            and r.text and r.text.strip()
-            and _y_overlap(r.bbox, material_label.bbox) > 0
-            and _x_center(r.bbox) > desc_x1
-        ]
-        material_values = _contiguous_x_run(material_value_candidates, desc_x1)
-        for value_region in material_values:
-            nearest_item = min(item_regions, key=lambda it: abs(_x_center(it.bbox) - _x_center(value_region.bbox)))
-            material_by_item[id(nearest_item)] = value_region.text.strip()
+    # Each item's own "column slot" for assigning a value to it by x-position - the midpoint
+    # between two neighboring items' centers, so a value is assigned to whichever item it's
+    # actually closest to AND inside that item's own half of the gap to its neighbor, never
+    # just "whichever item happens to be nearest" with no limit - that unbounded nearest-match
+    # is what let a stray, unrelated chunk of page text (found far from every item) attach
+    # itself to the last item (e.g. Collar) when a wide search band swept it in. A value whose
+    # x-center falls before the first item's left slot edge or after the last item's right slot
+    # edge belongs to no item and is dropped, not force-assigned to an end item.
+    _items_by_x = sorted(item_regions, key=lambda r: _x_center(r.bbox))
+    _item_slot_bounds: dict[int, tuple[float, float]] = {}
+    for idx, it in enumerate(_items_by_x):
+        it_x = _x_center(it.bbox)
+        if idx == 0:
+            # No left neighbor to bound this slot - mirror the (bounded) right half-gap instead
+            # of leaving it open to -inf, so the first item's slot is the same width as its own
+            # gap to the next item, not unlimited. A single-item table (no neighbor either side)
+            # falls back to MATERIAL_WRAP_BAND_PX as a sane finite width.
+            right_gap = (
+                (_x_center(_items_by_x[idx + 1].bbox) - it_x) / 2 if len(_items_by_x) > 1
+                else MATERIAL_WRAP_BAND_PX
+            )
+            left = it_x - right_gap
+        else:
+            left = (_x_center(_items_by_x[idx - 1].bbox) + it_x) / 2
+        if idx == len(_items_by_x) - 1:
+            # Same fix, mirrored: no right neighbor to bound the LAST item's slot - this is
+            # exactly what let a stray, unrelated chunk of page text (found far to the right of
+            # every real item) attach itself to the last item (e.g. Collar) when nothing capped
+            # how far right its slot could extend.
+            left_gap = it_x - left
+            right = it_x + left_gap
+        else:
+            right = (it_x + _x_center(_items_by_x[idx + 1].bbox)) / 2
+        _item_slot_bounds[id(it)] = (left, right)
 
-    # QTY, same pattern as MATERIAL above: this table had no qty extraction at all until now,
-    # which is exactly why every component on a WO-9374-family drawing defaulted to a fallback
-    # quantity of 1 (app.providers.deterministic_provider / app.services.bom_candidate_service)
-    # even though the real per-item QTY values (e.g. "2 2 1 2 2 16...") are right there on the
-    # page - just in this table's own transposed layout, one more value strip stacked below
-    # DESCRIPTION/MATERIAL rather than a value in a row-based QTY column.
+    def _assign_to_item_column(value_region) -> object | None:
+        vx = _x_center(value_region.bbox)
+        for it in item_regions:
+            left, right = _item_slot_bounds[id(it)]
+            if left <= vx <= right:
+                return it
+        return None
+
+    # QTY's label position is computed FIRST (even though it's matched below) because the
+    # MATERIAL block needs it as a hard lower boundary for how far a wrapped material callout's
+    # later lines can extend - see material_band_bottom.
     qty_label_candidates = [
         r for r in regions
         if r is not description_label
@@ -227,6 +253,66 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
         # drawings, only a few px apart, so anything much further than that isn't this table's.
         if abs(_x_center(qty_label_candidate.bbox) - _x_center(description_label.bbox)) <= _LABEL_STRIP_SLACK_PX:
             qty_label = qty_label_candidate
+
+    material_by_item: dict[int, str] = {}
+    if material_label_candidates:
+        material_label = min(
+            material_label_candidates,
+            key=lambda r: abs(_x_center(r.bbox) - _x_center(description_label.bbox)),
+        )
+        # A real material callout (e.g. "A 240 TYP 304", "IS 2062 E250 Gr.BR") routinely wraps
+        # across SEVERAL lines in this table's narrow rotated column - each wrapped line is its
+        # own OcrRegion, stacked at different y-positions below the MATERIAL label, not all
+        # sharing the label's own single-line y-band. The OLD _y_overlap(value, material_label)
+        # check only ever caught whichever one line happened to land in that exact band -
+        # confirmed directly against a real production drawing, where Bellows' material came
+        # through as the full "A 240 TYP 304" (lucky single-line match) while every other
+        # component's came through as a single bare fragment ("304", "516", "2062", "6.8", ...),
+        # the rest of their own wrapped lines silently dropped. The band below is widened to
+        # cover realistic wrapping depth, bounded below by the QTY row's own top edge (when
+        # found) so it can never reach into QTY's own digits, and matched to an item by
+        # _assign_to_item_column's column-containment check (never "nearest, however far") so a
+        # wide band can't let an unrelated chunk of page text attach itself to an end item.
+        material_y0, _material_y1 = _y_span(material_label.bbox)
+        if qty_label is not None:
+            material_band_bottom = min(
+                material_y0 + MATERIAL_WRAP_BAND_PX,
+                _y_span(qty_label.bbox)[0] - _LABEL_STRIP_SLACK_PX,
+            )
+        else:
+            material_band_bottom = material_y0 + MATERIAL_WRAP_BAND_PX
+        material_value_candidates = [
+            r for r in regions
+            if r is not material_label
+            and r not in item_regions
+            and r is not description_label
+            and r.text and r.text.strip()
+            and material_y0 - _LABEL_STRIP_SLACK_PX <= _y_center(r.bbox) <= material_band_bottom
+            and _x_center(r.bbox) > desc_x1
+            # Excludes regions injected from the PDF's embedded text layer (see
+            # app.providers.deterministic_provider._embedded_text_numeric_regions, which sets
+            # confidence=1.0 as its own marker, never produced by real image OCR) - those exist
+            # only to supply QTY digits that image OCR missed entirely; a bare number like
+            # "304"/"516" from that same source is just as likely to duplicate a fragment image
+            # OCR already found as part of a full material phrase ("A 240 TYP 304") as it is to
+            # be genuinely separate, so it's left out of material matching altogether.
+            and r.confidence != 1.0
+        ]
+        material_values = _contiguous_x_run(material_value_candidates, desc_x1)
+        # Concatenate every wrapped-line fragment assigned to the same item (not overwrite) -
+        # reading order top-to-bottom so "A 240" + "TYP 304" joins as "A 240 TYP 304".
+        material_parts_by_item: dict[int, list[tuple[float, str]]] = {}
+        for value_region in material_values:
+            owner = _assign_to_item_column(value_region)
+            if owner is None:
+                continue
+            material_parts_by_item.setdefault(id(owner), []).append(
+                (_y_center(value_region.bbox), value_region.text.strip())
+            )
+        for item_id, parts in material_parts_by_item.items():
+            parts.sort(key=lambda p: p[0])
+            material_by_item[item_id] = " ".join(text for _, text in parts)
+
     if qty_label is not None:
         qty_value_candidates = [
             r for r in regions
@@ -239,8 +325,10 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
         ]
         qty_values = _contiguous_x_run(qty_value_candidates, desc_x1)
         for value_region in qty_values:
-            nearest_item = min(item_regions, key=lambda it: abs(_x_center(it.bbox) - _x_center(value_region.bbox)))
-            # Nearest-match only, same tolerance as material - but a QTY cell is always a bare
+            owner = _assign_to_item_column(value_region)
+            if owner is None:
+                continue
+            # Same column-containment match as material - but a QTY cell is always a bare
             # number, so also require it actually parses as one; a non-numeric stray region
             # (e.g. a misaligned material fragment) must never masquerade as a quantity.
             text = value_region.text.strip()
@@ -248,7 +336,7 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
                 float(text)
             except ValueError:
                 continue
-            qty_by_item[id(nearest_item)] = text
+            qty_by_item[id(owner)] = text
 
     rows = [
         BomRow(

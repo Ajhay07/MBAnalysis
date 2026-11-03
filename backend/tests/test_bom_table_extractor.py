@@ -253,6 +253,52 @@ def test_transposed_table_qty_column_extracted_not_left_blank():
     assert by_description["COLLAR"] == "4"
 
 
+def test_transposed_table_material_wraps_across_multiple_lines():
+    # Regression: a real material callout ("A 240 TYP 304") routinely wraps across TWO lines in
+    # this table's narrow rotated column - the OLD single-line _y_overlap(value, material_label)
+    # check only ever caught whichever line happened to land in the label's own y-band, so most
+    # components' material came through as a single bare fragment ("304" alone, not "A 240 TYP
+    # 304"). Both wrapped lines, stacked ~90px apart (observed spacing on the real drawing), must
+    # now join in reading order.
+    desc_y, mat_y = 1800, 2000
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240", 418, mat_y, w=25, h=80),
+        _region("TYP 304", 418, mat_y + 90, w=25, h=80),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    bellows = next(row for row in table.rows if row.description == "BELLOWS")
+    assert bellows.material == "A 240 TYP 304"
+
+
+def test_transposed_table_wide_material_band_never_attaches_to_the_last_item_unbounded():
+    # Regression: _assign_to_item_column's end-item slot used to extend to +/-inf for the
+    # first/last item (nothing to bound it against), so a wide material-wrap search band let an
+    # unrelated chunk of page text - found far to the right of every real item - attach itself
+    # to the LAST item (Collar, on the real drawing) instead of being correctly left
+    # unattributed. The last item's slot must now be capped (mirrored from its own left gap),
+    # so a stray region far outside any real item's column is dropped, not absorbed.
+    desc_y, mat_y = 1800, 2000
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("COLLAR", 445, desc_y, w=25, h=75),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=90),
+        _region("A 240 Gr. 304", 450, mat_y, w=25, h=90),
+        # Unrelated page text, far to the right of COLLAR's own column - must never attach to it.
+        _region("Total Assembly Weight 195 kg", 1500, mat_y + 50, w=25, h=90),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    collar = next(row for row in table.rows if row.description == "COLLAR")
+    assert collar.material == "A 240 Gr. 304"
+    assert "Total Assembly Weight" not in collar.material
+
+
 def test_transposed_table_ignores_a_distant_unrelated_quantity_field_for_qty():
     # Without a genuine nearby QTY label at all, the far-away spec-parameters "QUANTITY" field
     # (the ONLY qty-aliased text anywhere on the page) must not be mistaken for this table's own
