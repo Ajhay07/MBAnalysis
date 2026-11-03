@@ -25,7 +25,7 @@ def _build_pdf(tmp_path, texts: list[tuple[str, float, float]]) -> str:
     return path
 
 
-def test_extracts_only_numeric_words_with_scaled_bbox(tmp_path):
+def test_extracts_numeric_words_and_the_qty_label_only(tmp_path):
     pdf_path = _build_pdf(tmp_path, [
         ("DESCRIPTION", 100, 100),
         ("BELLOWS", 100, 130),
@@ -35,7 +35,10 @@ def test_extracts_only_numeric_words_with_scaled_bbox(tmp_path):
     ])
     regions = _embedded_text_numeric_regions(pdf_path, page_number=1)
     texts = {r.text for r in regions}
-    assert texts == {"2", "16"}  # DESCRIPTION/BELLOWS/QTY (non-numeric) never included
+    # QTY is the one header-label word also pulled (see _EMBEDDED_LABEL_WORDS - traced to a
+    # real drawing where even the "QTY" label itself was missing from image OCR, not just its
+    # digits); DESCRIPTION/BELLOWS (ordinary running text) are still never included.
+    assert texts == {"2", "16", "QTY"}
 
     zoom = get_settings().PDF_RENDER_DPI / 72.0
     two = next(r for r in regions if r.text == "2")

@@ -111,18 +111,31 @@ def _scan_label_value(lines: list[str], label_re: "re.Pattern", value_re: "re.Pa
 
 
 _NUMERIC_WORD_RE = re.compile(r"^\d+(\.\d+)?$")
+# Bare header-label words worth pulling from the embedded PDF text layer alongside digits (see
+# _embedded_text_numeric_regions) - traced directly to a real production drawing where NEITHER
+# the QTY column's digits NOR its own "QTY" label were detected by PaddleOCR's region pass over
+# the rasterized image (confirmed by pulling that drawing's actual live OCR regions: zero hits
+# for "QTY" anywhere near the table), even though both are read correctly from the SAME page's
+# embedded text layer. Deliberately just the QTY aliases, NOT every header label (DESCRIPTION/
+# MATERIAL/SIZE are already found reliably by image OCR on every drawing seen so far - adding a
+# second, embedded-text copy of a label already found would risk a near-duplicate region at a
+# slightly different position confusing the single-label "pick the first match" selection in
+# bom_table_extractor._extract_transposed_bom_table). QTY is the one column proven to need this.
+_EMBEDDED_LABEL_WORDS = {"QTY", "QUANTITY", "QTY."}
 
 
 def _embedded_text_numeric_regions(pdf_path: str, page_number: int) -> list[OcrRegion]:
-    """Bare numeric words (e.g. a BOM table's QTY column digits) read from the PDF's own
-    embedded text layer via PyMuPDF, with bounding boxes scaled into the SAME pixel coordinate
-    space the rasterized-image OCR regions use (zoom = Settings.PDF_RENDER_DPI / 72, identical
-    to app.services.analysis_pipeline.rasterize_pdf_pages' own rasterization) so they can be
+    """Bare numeric words and BOM-table header-label words (QTY, MATERIAL, DESCRIPTION, ...)
+    read from the PDF's own embedded text layer via PyMuPDF, with bounding boxes scaled into the
+    SAME pixel coordinate space the rasterized-image OCR regions use (zoom =
+    Settings.PDF_RENDER_DPI / 72, identical to
+    app.services.analysis_pipeline.rasterize_pdf_pages' own rasterization) so they can be
     spatially matched against item/label regions exactly like any other OcrRegion. Restricted to
-    numeric-only tokens (never a word) - this is a supplement for missing body-cell digits, not
-    a general substitute for image OCR, so it can't introduce a false header-label match or a
-    duplicate of text the image OCR pass already found correctly. Returns [] for a non-PDF
-    source, an unreadable page, or any PyMuPDF error - never raises into the caller."""
+    numbers and this short exact-match label list (see _EMBEDDED_LABEL_WORDS) - never a general
+    substitute for image OCR, so it can't introduce a false header-label match from unrelated
+    running text or a duplicate of text the image OCR pass already found correctly. Returns []
+    for a non-PDF source, an unreadable page, or any PyMuPDF error - never raises into the
+    caller."""
     if fitz is None:
         return []
     try:
@@ -136,7 +149,7 @@ def _embedded_text_numeric_regions(pdf_path: str, page_number: int) -> list[OcrR
     regions: list[OcrRegion] = []
     for x0, y0, x1, y1, word, *_rest in words:
         text = (word or "").strip()
-        if not _NUMERIC_WORD_RE.match(text):
+        if not (_NUMERIC_WORD_RE.match(text) or text.upper() in _EMBEDDED_LABEL_WORDS):
             continue
         regions.append(OcrRegion(
             text=text, confidence=1.0,

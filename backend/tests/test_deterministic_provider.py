@@ -184,16 +184,18 @@ def test_components_extracted_from_real_bom_table_regions(monkeypatch):
 
 
 def test_transposed_bom_quantity_comes_from_pdf_embedded_text_not_image_ocr(monkeypatch, tmp_path):
-    """End-to-end regression for the real production bug: a WO-9374-style transposed BOM table
-    whose image-OCR pass finds DESCRIPTION/MATERIAL/item regions but ZERO quantity digits
-    (reproducing the real drawing exactly - confirmed against its actual OCR regions, which had
-    no numeric region anywhere near the table) must still end up with the right quantity on each
-    component, because pdf_path now supplies those missing digits straight from the PDF's own
-    embedded text layer."""
+    """End-to-end regression for the real production bug, reproduced exactly: pulling the live
+    OCR regions for the actual WO 9374 drawing confirmed image OCR (PaddleOCR) finds the
+    DESCRIPTION/MATERIAL/item regions just fine but has ZERO hits for "QTY" anywhere near the
+    table AND zero numeric regions near it either - BOTH the column's own label and its digit
+    values are missing from image OCR, not just the digits. The SAME page's raw_ocr_text (built
+    from the embedded PDF text layer) already proved both are genuinely in the PDF. Components
+    must still end up with the right quantity, because pdf_path now supplies both the missing
+    "QTY" label and its digit values straight from that embedded text layer."""
     import fitz
     from app.config import get_settings
 
-    desc_y, mat_y, qty_y = 1800, 2000, 2200
+    desc_y, mat_y = 1800, 2000
     image_regions = [
         _region("DESCRIPTION", 390, desc_y, w=25, h=110),
         _region("BELLOWS", 413, desc_y, w=25, h=95),
@@ -201,9 +203,7 @@ def test_transposed_bom_quantity_comes_from_pdf_embedded_text_not_image_ocr(monk
         _region("MATERIAL", 394, mat_y, w=25, h=85),
         _region("A 240 TYP 304", 418, mat_y, w=25, h=120),
         _region("A 516 Gr.70", 450, mat_y, w=25, h=90),
-        # The QTY LABEL is readable by image OCR on the real drawing (it's normal-sized text,
-        # unlike the small digit values below it) - only the VALUE digits were the ones missing.
-        _region("QTY", 396, qty_y, w=25, h=80),
+        # No QTY region of any kind - exactly the real drawing's actual image-OCR output.
     ]
     fake_image = np.zeros((10, 10, 3), dtype=np.uint8)
     monkeypatch.setattr(
@@ -213,13 +213,15 @@ def test_transposed_bom_quantity_comes_from_pdf_embedded_text_not_image_ocr(monk
         lambda image, page_number=1: PageOcrResult(page_number=page_number, regions=image_regions),
     )
 
-    # The embedded PDF text layer DOES have the QTY values (same as the real drawing's
-    # raw_ocr_text, which already proved they're really in the PDF) - positioned, in PDF points,
-    # so that after zoom-scaling they land at the same pixel location the image-region fixture
-    # above uses for its desc_x/qty_y strip.
+    # The embedded PDF text layer DOES have both the "QTY" label and its values (same as the
+    # real drawing's raw_ocr_text, which already proved they're really in the PDF) - positioned,
+    # in PDF points, so that after zoom-scaling they land at the same pixel location the
+    # image-region fixture above uses for its desc_x strip, one more row below MATERIAL.
+    qty_y = 2200
     zoom = get_settings().PDF_RENDER_DPI / 72.0
     doc = fitz.open()
     page = doc.new_page(width=1200, height=3000)
+    page.insert_text((396 / zoom, (qty_y + 20) / zoom), "QTY", fontsize=8)
     page.insert_text((413 / zoom, (qty_y + 20) / zoom), "2", fontsize=8)
     page.insert_text((445 / zoom, (qty_y + 20) / zoom), "8", fontsize=8)
     pdf_path = str(tmp_path / "wo9374_style.pdf")
