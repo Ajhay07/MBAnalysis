@@ -218,6 +218,59 @@ def test_transposed_table_items_as_columns_not_rows():
     assert "MATERIAL No." not in descriptions
 
 
+def test_transposed_table_qty_column_extracted_not_left_blank():
+    # Regression: the real bug behind every WO-9374-family component defaulting to a fallback
+    # quantity of 1 - _extract_transposed_bom_table never extracted QTY at all, only
+    # description/material, even when the table's own QTY label+values were right there on the
+    # page (just one more value strip stacked below DESCRIPTION/MATERIAL, same transposed
+    # layout). A design-spec "QUANTITY" field sitting far away (same fixture as
+    # test_transposed_table_items_as_columns_not_rows) must still be correctly ignored, proving
+    # the fix finds THIS table's own QTY strip by position, not just by matching the word.
+    desc_y, mat_y, qty_y = 1800, 2000, 2100
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("END PIPE", 445, desc_y, w=25, h=85),
+        _region("COLLAR", 477, desc_y, w=25, h=75),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=120),
+        _region("A 516 Gr.70", 450, mat_y, w=25, h=90),
+        # This table's own QTY strip - same narrow x-strip as DESCRIPTION/MATERIAL, stacked
+        # below them, same pattern confirmed on the real WO 9374 drawing's raw OCR text.
+        _region("QTY", 396, qty_y, w=25, h=80),
+        _region("2", 413, qty_y, w=25, h=90),
+        _region("2", 445, qty_y, w=25, h=80),
+        _region("4", 477, qty_y, w=25, h=70),
+        # The unrelated far-away spec-parameters "QUANTITY" field - must never be picked over
+        # the real "QTY" label above, nor contribute any value to a row.
+        _region("QUANTITY", 700, desc_y, w=25, h=90),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    by_description = {row.description: row.qty for row in table.rows}
+    assert by_description["BELLOWS"] == "2"
+    assert by_description["END PIPE"] == "2"
+    assert by_description["COLLAR"] == "4"
+
+
+def test_transposed_table_ignores_a_distant_unrelated_quantity_field_for_qty():
+    # Without a genuine nearby QTY label at all, the far-away spec-parameters "QUANTITY" field
+    # (the ONLY qty-aliased text anywhere on the page) must not be mistaken for this table's own
+    # QTY column - every row.qty stays "" rather than being filled from the wrong source.
+    desc_y, mat_y = 1800, 2000
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=120),
+        _region("QUANTITY", 700, desc_y, w=25, h=90),
+        _region("16", 700, desc_y + 100, w=25, h=90),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    assert all(row.qty == "" for row in table.rows)
+
+
 def test_tight_run_gap_excludes_a_nearby_unrelated_panel_label():
     # Regression: a real production drawing (3I/26160A) had real BOM items 13-18px apart, and
     # an unrelated "COLLAR DETAIL" panel-label region sitting only 86px past the last real item

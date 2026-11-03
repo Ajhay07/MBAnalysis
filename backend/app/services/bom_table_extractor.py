@@ -98,6 +98,11 @@ def _y_overlap(bbox_a, bbox_b) -> float:
 # real inter-item gap while still cutting well below the 150px+ gap to a genuinely unrelated
 # field (e.g. a spec-parameters block's "QUANTITY" cell sharing the same page/row band).
 TRANSPOSED_RUN_GAP_PX = 50
+# Max x-distance between the transposed table's DESCRIPTION label and another of its own labels
+# (MATERIAL, QTY) - observed only a few px apart on real MB drawings (both are stacked in the
+# same narrow left strip). Anything further is almost certainly an unrelated same-named field
+# elsewhere on the page (e.g. a design-spec-parameters "QUANTITY" box), not this table's own QTY.
+_LABEL_STRIP_SLACK_PX = 60
 
 
 def _contiguous_x_run(candidates: list, start_x: float) -> list:
@@ -181,16 +186,65 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
             nearest_item = min(item_regions, key=lambda it: abs(_x_center(it.bbox) - _x_center(value_region.bbox)))
             material_by_item[id(nearest_item)] = value_region.text.strip()
 
+    # QTY, same pattern as MATERIAL above: this table had no qty extraction at all until now,
+    # which is exactly why every component on a WO-9374-family drawing defaulted to a fallback
+    # quantity of 1 (app.providers.deterministic_provider / app.services.bom_candidate_service)
+    # even though the real per-item QTY values (e.g. "2 2 1 2 2 16...") are right there on the
+    # page - just in this table's own transposed layout, one more value strip stacked below
+    # DESCRIPTION/MATERIAL rather than a value in a row-based QTY column.
+    qty_label_candidates = [
+        r for r in regions
+        if r is not description_label
+        and _normalize(r.text or "") in HEADER_TOKENS["qty"]
+    ]
+    qty_by_item: dict[int, str] = {}
+    qty_label = None
+    if qty_label_candidates:
+        qty_label_candidate = min(
+            qty_label_candidates,
+            key=lambda r: abs(_x_center(r.bbox) - _x_center(description_label.bbox)),
+        )
+        # Guard against a same-named field that belongs to a totally different, unrelated block
+        # on the page (e.g. a design-spec-parameters "QUANTITY" field sitting hundreds of px
+        # away - see test_transposed_table_items_as_columns_not_rows) - this table's own labels
+        # (DESCRIPTION/MATERIAL/QTY) are observed stacked in the same narrow x-strip on real MB
+        # drawings, only a few px apart, so anything much further than that isn't this table's.
+        if abs(_x_center(qty_label_candidate.bbox) - _x_center(description_label.bbox)) <= _LABEL_STRIP_SLACK_PX:
+            qty_label = qty_label_candidate
+    if qty_label is not None:
+        qty_value_candidates = [
+            r for r in regions
+            if r is not qty_label
+            and r not in item_regions
+            and r is not description_label
+            and r.text and r.text.strip()
+            and _y_overlap(r.bbox, qty_label.bbox) > 0
+            and _x_center(r.bbox) > desc_x1
+        ]
+        qty_values = _contiguous_x_run(qty_value_candidates, desc_x1)
+        for value_region in qty_values:
+            nearest_item = min(item_regions, key=lambda it: abs(_x_center(it.bbox) - _x_center(value_region.bbox)))
+            # Nearest-match only, same tolerance as material - but a QTY cell is always a bare
+            # number, so also require it actually parses as one; a non-numeric stray region
+            # (e.g. a misaligned material fragment) must never masquerade as a quantity.
+            text = value_region.text.strip()
+            try:
+                float(text)
+            except ValueError:
+                continue
+            qty_by_item[id(nearest_item)] = text
+
     rows = [
         BomRow(
             description=item.text.strip(),
             material=material_by_item.get(id(item), ""),
+            qty=qty_by_item.get(id(item), ""),
             raw_text=item.text.strip(),
             confidence=item.confidence,
         )
         for item in item_regions
     ]
-    return BomTableExtraction(header_columns=["description", "material"], rows=rows)
+    return BomTableExtraction(header_columns=["description", "material", "qty"], rows=rows)
 
 
 def extract_bom_table(regions) -> BomTableExtraction | None:
