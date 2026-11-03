@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.models.models import (
     AuditLog, Bom, BomLineItem, Component, Indent, IndentLine, IndentRule, IndentRuleFormula,
 )
+from app.services.calc_engine_service import compute_bellows_or_shroud_result, format_bellows_or_shroud_size_text
 
 # Canonical order for size-string formatting when a component's `dimensions` dict uses these
 # keys (OD/ID/Thk/L is the pattern used throughout MB's drawings - see bellow/end-pipe/flange/
@@ -68,11 +69,26 @@ def lines_from_bom(db: Session, bom: Bom, assembly_quantity: float) -> list[dict
     out: list[dict] = []
     for li in top_level:
         dimensions = None
+        component = None
         if li.component_id:
             component = db.query(Component).get(li.component_id)
             if component:
                 dimensions = component.dimensions
         size_text = format_size_text(dimensions)
+        # Bellows and Shroud are the only two component types with a real manufacturing
+        # FORMULA in engineering_engine (blank length/thickness from OD; base circumference
+        # from OD) - run it automatically here, no manual step, and use its "L x W x T" size
+        # text when it produced something usable. Persisted onto the component so it's visible
+        # wherever that component is shown, not just on this indent. Every other component type
+        # keeps the plain extracted-dimensions text above - there's no formula to apply to them.
+        if component is not None:
+            calc_result = compute_bellows_or_shroud_result(component)
+            if calc_result is not None:
+                component.calc_spec_identifier = calc_result["spec_identifier"]
+                component.calc_result = calc_result
+                formatted = format_bellows_or_shroud_size_text(calc_result)
+                if formatted:
+                    size_text = formatted
         wt_qty = None if li.quantity is None else float(li.quantity) * float(assembly_quantity)
         mtl_spec = li.description
         if li.material:
