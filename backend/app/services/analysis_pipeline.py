@@ -270,6 +270,7 @@ def run_analysis(db: Session, drawing: Drawing, actor: str = "system", retry_cou
                         image_path=page_preview_path(drawing, page_number),
                         ocr_text=ocr_text,
                         drawing_number=drawing.drawing_number,
+                        pdf_path=path, page_number=page_number,
                     )
                 except (ProviderAuthError, ProviderTransientError) as exc:
                     _fail(str(exc))

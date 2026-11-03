@@ -22,11 +22,17 @@ try:
 except Exception:  # pragma: no cover
     cv2 = None
 
+try:
+    import fitz  # pymupdf
+except Exception:  # pragma: no cover
+    fitz = None
+
+from app.config import get_settings
 from app.providers.base import DrawingAnalysisProvider
 from app.schemas.analysis import AnalysisResult, Ambiguity, ComponentCandidate, DimensionFinding, TitleBlock
 from app.services.bom_table_extractor import extract_bom_table
 from app.services.drawing_detail_extractor import extract_detail_dimensions, match_panel_to_description
-from app.services.paddle_ocr import run_page_ocr
+from app.services.paddle_ocr import OcrRegion, run_page_ocr
 
 # --- Title block field patterns -------------------------------------------------------------
 # Each pattern captures the value following a known label on the same line. Applied line-by-line
@@ -85,6 +91,41 @@ def _scan_label_value(lines: list[str], label_re: "re.Pattern", value_re: "re.Pa
                 except ValueError:
                     return None
     return None
+
+
+_NUMERIC_WORD_RE = re.compile(r"^\d+(\.\d+)?$")
+
+
+def _embedded_text_numeric_regions(pdf_path: str, page_number: int) -> list[OcrRegion]:
+    """Bare numeric words (e.g. a BOM table's QTY column digits) read from the PDF's own
+    embedded text layer via PyMuPDF, with bounding boxes scaled into the SAME pixel coordinate
+    space the rasterized-image OCR regions use (zoom = Settings.PDF_RENDER_DPI / 72, identical
+    to app.services.analysis_pipeline.rasterize_pdf_pages' own rasterization) so they can be
+    spatially matched against item/label regions exactly like any other OcrRegion. Restricted to
+    numeric-only tokens (never a word) - this is a supplement for missing body-cell digits, not
+    a general substitute for image OCR, so it can't introduce a false header-label match or a
+    duplicate of text the image OCR pass already found correctly. Returns [] for a non-PDF
+    source, an unreadable page, or any PyMuPDF error - never raises into the caller."""
+    if fitz is None:
+        return []
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        words = page.get_text("words")  # (x0, y0, x1, y1, word, block_no, line_no, word_no)
+        doc.close()
+    except Exception:
+        return []
+    zoom = get_settings().PDF_RENDER_DPI / 72.0
+    regions: list[OcrRegion] = []
+    for x0, y0, x1, y1, word, *_rest in words:
+        text = (word or "").strip()
+        if not _NUMERIC_WORD_RE.match(text):
+            continue
+        regions.append(OcrRegion(
+            text=text, confidence=1.0,
+            bbox=[[x0 * zoom, y0 * zoom], [x1 * zoom, y0 * zoom], [x1 * zoom, y1 * zoom], [x0 * zoom, y1 * zoom]],
+        ))
+    return regions
 
 
 def _parse_drawing_quantity_and_nb(ocr_text: str) -> tuple[float | None, float | None]:
@@ -252,7 +293,8 @@ class DeterministicProvider(DrawingAnalysisProvider):
 
     name = "deterministic"
 
-    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str) -> AnalysisResult:
+    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str,
+                pdf_path: str | None = None, page_number: int = 1) -> AnalysisResult:
         title_block = _parse_title_block(ocr_text, drawing_number)
         dimensions = _parse_dimensions(ocr_text)
         materials = _parse_materials(ocr_text)
@@ -261,7 +303,7 @@ class DeterministicProvider(DrawingAnalysisProvider):
         ambiguities: list[Ambiguity] = []
         missing_info: list[str] = []
 
-        regions = self._regions_for(image_path)
+        regions = self._regions_for(image_path, pdf_path=pdf_path, page_number=page_number)
         table = extract_bom_table(regions) if regions else None
         known_descriptions = [row.description for row in table.rows if row.description] if table else []
         detail_panels = extract_detail_dimensions(regions, known_descriptions) if regions else []
@@ -306,23 +348,38 @@ class DeterministicProvider(DrawingAnalysisProvider):
             missing_info=missing_info,
         )
 
-    def _regions_for(self, image_path: str):
+    def _regions_for(self, image_path: str, pdf_path: str | None = None, page_number: int = 1):
         """Re-runs OCR to get region/bbox geometry (not just the flattened text string the
         pipeline already passed in) so BOM-table columns can be located. A second OCR pass per
         page is the simplest way to get this without changing the shared provider interface
         every other provider also implements; PaddleOCR's own engine is a cached singleton
         (see app.services.paddle_ocr), so the repeat cost is the per-image inference call only,
-        not re-loading the model."""
-        if cv2 is None:
-            return []
-        try:
-            image = cv2.imread(image_path)
-        except Exception:
-            image = None
-        if image is None:
-            return []
-        try:
-            result = run_page_ocr(image, page_number=1)
-        except Exception:
-            return []
-        return result.regions
+        not re-loading the model.
+
+        Also merges in word-level regions read straight from the PDF's own embedded text layer
+        (PyMuPDF), when `pdf_path` is given - traced directly to a real quantity-extraction bug
+        on a production drawing: PaddleOCR's region detection over the rasterized image
+        completely missed every digit in the BOM table's QTY strip (too small/low-contrast at
+        render DPI to detect as its own region), even though the SAME PDF's embedded text layer
+        reads them correctly (this is exactly why `ocr_text`/raw_ocr_text - built from
+        page.get_text(), not from these regions - already contained the right numbers while the
+        structured, region-based BOM/detail-panel extraction never saw them). Restricted to bare
+        numeric tokens only (see _embedded_text_numeric_regions) so it can only ever supplement
+        a missing body-row digit - it can never contribute a new header-label match, so it can't
+        change how/whether a table or detail panel is found, only whether a QTY cell inside an
+        already-found one is read."""
+        regions: list = []
+        if cv2 is not None:
+            try:
+                image = cv2.imread(image_path)
+            except Exception:
+                image = None
+            if image is not None:
+                try:
+                    result = run_page_ocr(image, page_number=1)
+                    regions = list(result.regions)
+                except Exception:
+                    regions = []
+        if pdf_path:
+            regions = regions + _embedded_text_numeric_regions(pdf_path, page_number)
+        return regions

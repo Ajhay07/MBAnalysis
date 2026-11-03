@@ -12,7 +12,15 @@ class DrawingAnalysisProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str) -> AnalysisResult:
+    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str,
+                pdf_path: str | None = None, page_number: int = 1) -> AnalysisResult:
+        # pdf_path/page_number: the ORIGINAL PDF (not the rasterized preview image_path) and
+        # which page, when the source is a PDF - lets a provider that wants word-level position
+        # data read it straight from the PDF's own embedded text layer (PyMuPDF), which is often
+        # far more complete than an image-OCR pass over the same page (see
+        # app.providers.deterministic_provider._regions_for). Optional and provider-specific;
+        # a provider that has no use for it (an AI vision provider working from image_path
+        # alone) just ignores it.
         ...
 
 

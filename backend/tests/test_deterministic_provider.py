@@ -163,6 +163,60 @@ def test_components_extracted_from_real_bom_table_regions(monkeypatch):
     assert by_part["P-101"].quantity == 32
 
 
+def test_transposed_bom_quantity_comes_from_pdf_embedded_text_not_image_ocr(monkeypatch, tmp_path):
+    """End-to-end regression for the real production bug: a WO-9374-style transposed BOM table
+    whose image-OCR pass finds DESCRIPTION/MATERIAL/item regions but ZERO quantity digits
+    (reproducing the real drawing exactly - confirmed against its actual OCR regions, which had
+    no numeric region anywhere near the table) must still end up with the right quantity on each
+    component, because pdf_path now supplies those missing digits straight from the PDF's own
+    embedded text layer."""
+    import fitz
+    from app.config import get_settings
+
+    desc_y, mat_y, qty_y = 1800, 2000, 2200
+    image_regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("END PIPE", 445, desc_y, w=25, h=85),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=120),
+        _region("A 516 Gr.70", 450, mat_y, w=25, h=90),
+        # The QTY LABEL is readable by image OCR on the real drawing (it's normal-sized text,
+        # unlike the small digit values below it) - only the VALUE digits were the ones missing.
+        _region("QTY", 396, qty_y, w=25, h=80),
+    ]
+    fake_image = np.zeros((10, 10, 3), dtype=np.uint8)
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: fake_image)
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.run_page_ocr",
+        lambda image, page_number=1: PageOcrResult(page_number=page_number, regions=image_regions),
+    )
+
+    # The embedded PDF text layer DOES have the QTY values (same as the real drawing's
+    # raw_ocr_text, which already proved they're really in the PDF) - positioned, in PDF points,
+    # so that after zoom-scaling they land at the same pixel location the image-region fixture
+    # above uses for its desc_x/qty_y strip.
+    zoom = get_settings().PDF_RENDER_DPI / 72.0
+    doc = fitz.open()
+    page = doc.new_page(width=1200, height=3000)
+    page.insert_text((413 / zoom, (qty_y + 20) / zoom), "2", fontsize=8)
+    page.insert_text((445 / zoom, (qty_y + 20) / zoom), "8", fontsize=8)
+    pdf_path = str(tmp_path / "wo9374_style.pdf")
+    doc.save(pdf_path)
+    doc.close()
+
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text="", drawing_number="DWG-9374",
+                               pdf_path=pdf_path, page_number=1)
+
+    by_desc = {c.description: c for c in result.components}
+    assert by_desc["BELLOWS"].quantity == 2
+    assert by_desc["BELLOWS"].quantity_basis == "explicit_callout"
+    assert by_desc["END PIPE"].quantity == 8
+    assert by_desc["END PIPE"].quantity_basis == "explicit_callout"
+
+
 def test_never_crashes_when_opencv_is_unavailable(monkeypatch):
     monkeypatch.setattr("app.providers.deterministic_provider.cv2", None)
     provider = DeterministicProvider()

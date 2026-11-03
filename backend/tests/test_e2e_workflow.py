@@ -190,7 +190,7 @@ def test_real_pdf_upload_full_path_mocked_provider_never_demo_tagged(client, mak
     class MockedProvider:
         name = "openai"
 
-        def analyze(self, *, image_path, ocr_text, drawing_number):
+        def analyze(self, *, image_path, ocr_text, drawing_number, pdf_path=None, page_number=1):
             return AnalysisResult(
                 provider="openai",
                 title_block=TitleBlock(drawing_number=drawing_number, title="Real Uploaded Part",

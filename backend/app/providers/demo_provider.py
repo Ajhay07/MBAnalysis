@@ -15,7 +15,8 @@ class DemoProvider(DrawingAnalysisProvider):
 
     name = "demo"
 
-    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str) -> AnalysisResult:
+    def analyze(self, *, image_path: str, ocr_text: str, drawing_number: str,
+                pdf_path: str | None = None, page_number: int = 1) -> AnalysisResult:
         return AnalysisResult(
             provider="demo",
             title_block=TitleBlock(
