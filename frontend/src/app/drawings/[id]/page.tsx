@@ -726,6 +726,7 @@ export default function DrawingViewerPage() {
                         <th className="th !px-2 text-right">Qty</th>
                         <th className="th !px-2">Make/Buy</th>
                         <th className="th !px-2">Catalog</th>
+                        <th className="th !px-2">Calc</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -781,6 +782,32 @@ export default function DrawingViewerPage() {
                                 </div>
                               ) : (
                                 <span className="text-xs text-steel-light">No match</span>
+                              )}
+                            </td>
+                            <td className="td !px-2">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  className="text-xs px-2 py-0.5 border border-border rounded-industrial hover:bg-steel/10 whitespace-nowrap"
+                                  onClick={() => calculateComponent(c)}
+                                  title="Classify this component and run it through the engineering calculation engine."
+                                >
+                                  Calculate
+                                </button>
+                                {c.calc_result && <CalcResultBadge result={c.calc_result} />}
+                              </div>
+                              {calcErrorByComponent[c.id] && (
+                                <div className="text-xs text-red-600 mt-1">{calcErrorByComponent[c.id]}</div>
+                              )}
+                              {c.calc_result && c.calc_result.status !== "UNCLASSIFIED" && (
+                                <div className="text-xs text-steel-light mt-1 whitespace-nowrap">
+                                  {Object.entries(c.calc_result.final_proposed_dimensions || {})
+                                    .filter(([, v]) => v !== null && v !== undefined)
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join("  ·  ")}
+                                </div>
+                              )}
+                              {c.calc_result?.status === "UNCLASSIFIED" && (
+                                <div className="text-xs text-steel-light mt-1">Unclassified</div>
                               )}
                             </td>
                           </tr>
