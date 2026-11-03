@@ -32,7 +32,15 @@ def get_bom(bom_id: str, db: Session = Depends(get_db),
 @router.get("/by-drawing/{drawing_id}", response_model=list[BomOut])
 def list_boms_for_drawing(drawing_id: str, db: Session = Depends(get_db),
                            current_user: User = Depends(get_current_user)):
-    return db.query(Bom).filter(Bom.drawing_id == drawing_id).order_by(Bom.version.desc()).all()
+    # Ordered by created_at, NOT version - app.services.bom_service.generate_bom_from_analysis
+    # scopes `version` PER ANALYSIS (count of BOMs already generated from that same analysis),
+    # restarting at 1 every time a new analysis is generated from, so it is never a reliable
+    # drawing-wide recency ordering on its own: a BOM regenerated twice from an OLDER analysis
+    # (version 2) would sort ahead of the very latest analysis's first-ever BOM (version 1),
+    # exactly the bug that let the frontend's "most recent BOM" (boms[0], see ensureBom() in
+    # the drawing page) silently keep serving stale data from an old analysis even after a
+    # newer, corrected analysis and a fresh BOM for it both existed.
+    return db.query(Bom).filter(Bom.drawing_id == drawing_id).order_by(Bom.created_at.desc()).all()
 
 
 @router.patch("/line-items/{line_item_id}")
