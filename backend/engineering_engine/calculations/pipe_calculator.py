@@ -24,17 +24,25 @@ def calculate_id(od: float | None, thickness: float | None, component: str) -> D
 def pipe_dimensions(
     od: float | None, thickness: float | None, length: float | None, component: str,
     detail_view: str = "", extraction_method: str = "ocr_detail_panel",
+    extraction_methods: dict[str, str] | None = None,
 ) -> dict[str, DimensionResult]:
     """OD/Thickness/Length pass through as VERIFIED when present (read directly off the CAD
-    detail, no calculation); MISSING when not. ID is always derived via calculate_id."""
+    detail, no calculation); MISSING when not. ID is always derived via calculate_id.
+
+    `extraction_methods` optionally overrides the per-field method (e.g.
+    {"thickness": "manual"} when thickness came from a reviewer's manual input rather than the
+    CAD detail panel OCR), so a mixed-source call (some fields auto-extracted, others typed in)
+    never mislabels a manual value as OCR-verified. Falls back to `extraction_method` for any
+    field not in the override dict - unchanged behavior for every existing caller."""
     results: dict[str, DimensionResult] = {}
+    methods = extraction_methods or {}
     for name, value in (("od", od), ("thickness", thickness), ("length", length)):
         if value is None:
             results[name] = missing(name, component)
         else:
             results[name] = DimensionResult(
                 name=name, value=value, unit="mm", status=DimensionStatus.VERIFIED,
-                component=component, detail_view=detail_view, extraction_method=extraction_method,
+                component=component, detail_view=detail_view, extraction_method=methods.get(name, extraction_method),
             )
     results["id"] = calculate_id(od, thickness, component)
     return results

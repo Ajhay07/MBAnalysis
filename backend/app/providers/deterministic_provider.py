@@ -189,10 +189,21 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
 
         dimensions: dict = {"size": row.size} if row.size else {}
         needs_dimension_confirmation = False
-        panel = match_panel_to_description(description, detail_panels) if detail_panels and not dimensions else None
+        # Always consult the matching detail panel, even when the BOM table's own SIZE cell
+        # already gave us something - a SIZE cell often carries only OD (or a partial/garbled
+        # reading), while the "<NAME> DETAIL" panel's structured od/id/thk/l/pcd/... dict is the
+        # one place Thickness and Length actually show up. Previously this panel lookup was
+        # skipped entirely whenever `dimensions` was already non-empty, which silently dropped
+        # Thickness/Length for every component whose BOM row had ANY size text - the fix is to
+        # merge the panel's keys in (never overwriting a key the BOM table itself already gave),
+        # not to replace or skip.
+        panel = match_panel_to_description(description, detail_panels) if detail_panels else None
         if panel is not None and panel.dimensions:
-            dimensions = dict(panel.dimensions)
-            needs_dimension_confirmation = panel.needs_confirmation
+            added_keys = [key for key in panel.dimensions if key not in dimensions]
+            for key, value in panel.dimensions.items():
+                dimensions.setdefault(key, value)
+            if added_keys:
+                needs_dimension_confirmation = panel.needs_confirmation
 
         is_assumption = qty_value is None or needs_dimension_confirmation
         assumption_parts = []

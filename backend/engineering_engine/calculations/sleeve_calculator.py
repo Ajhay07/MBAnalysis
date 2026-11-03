@@ -23,14 +23,21 @@ def sleeve_dimensions(
     od: float | None, thickness: float | None, length: float | None,
     mid_pipe_interface_reference: float | None = None,
     component: str = "Sleeve", detail_view: str = "Sleeve Detail",
-    od_source: str = "manual",
+    od_source: str = "manual", thickness_source: str = "manual", length_source: str = "manual",
 ) -> dict[str, DimensionResult]:
     """`od` is Sleeve's own true outer diameter (509mm on WO 9374, matching the indent's SIZE
     column - NOT the larger 539mm value the auto-extractor's descending-diameter convention
     picks up from the same detail panel). `mid_pipe_interface_reference` carries that 539mm
     value separately, for traceability, with status REVIEW_REQUIRED since its real identity
     (very likely Mid Pipe's own ID, not a Sleeve dimension at all) is not yet confirmed against
-    the drawing's own dimension-reference callouts."""
+    the drawing's own dimension-reference callouts.
+
+    `od_source`/`thickness_source`/`length_source` record where each value actually came from
+    ("manual" or "ocr_detail_panel") - each defaults to "manual" (unchanged behavior for every
+    existing caller that doesn't pass one), but a caller that fell back to CAD-detail-panel OCR
+    evidence for thickness/length should pass "ocr_detail_panel" so that's reflected honestly
+    rather than mislabeled as a manual reading."""
+    sources = {"od": od_source, "thickness": thickness_source, "length": length_source}
     results: dict[str, DimensionResult] = {}
     for name, value in (("od", od), ("thickness", thickness), ("length", length)):
         if value is None:
@@ -38,7 +45,7 @@ def sleeve_dimensions(
         else:
             results[name] = DimensionResult(
                 name=name, value=value, unit="mm", status=DimensionStatus.VERIFIED,
-                component=component, detail_view=detail_view, extraction_method=od_source if name == "od" else "manual",
+                component=component, detail_view=detail_view, extraction_method=sources[name],
             )
     if mid_pipe_interface_reference is not None:
         results["mid_pipe_interface_reference"] = DimensionResult(

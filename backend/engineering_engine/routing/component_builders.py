@@ -45,12 +45,14 @@ def _quantity(comp_input: ComponentInput, assembly_quantity: float):
     return None
 
 
-def _manual_result(name: str, value, component: str, unit: str = "mm", notes: str = "") -> DimensionResult | None:
+def _manual_result(name: str, value, component: str, unit: str = "mm", notes: str = "",
+                    extraction_method: str = "manual") -> DimensionResult | None:
     if value is None:
         return None
     return DimensionResult(
         name=name, value=value, unit=unit, status=DimensionStatus.VERIFIED, component=component,
-        extraction_method="manual", notes=notes or "Manually supplied for this work order.",
+        extraction_method=extraction_method,
+        notes=notes or ("Manually supplied for this work order." if extraction_method == "manual" else ""),
     )
 
 
@@ -89,7 +91,14 @@ def build_shroud(evidence, comp_input: ComponentInput, assembly_quantity: float)
     final_length = shroud_calculator.calculate_final_length(base_length.value, reference_length)
     dims = {"base_length": base_length, "length": final_length}
     width_r = _manual_result("width", m.get("width"), "Shroud")
-    thickness_r = _manual_result("thickness", m.get("thickness"), "Shroud")
+    thickness = m.get("thickness")
+    if thickness is None:
+        thickness = _evidence_value(evidence, "thk")
+    thickness_source = "manual" if m.get("thickness") is not None else "ocr_detail_panel"
+    thickness_r = _manual_result(
+        "thickness", thickness, "Shroud", extraction_method=thickness_source,
+        notes="" if thickness_source == "manual" else "Read from the CAD detail panel.",
+    )
     if width_r:
         dims["width"] = width_r
     if thickness_r:
@@ -103,12 +112,28 @@ def build_shroud(evidence, comp_input: ComponentInput, assembly_quantity: float)
 
 def build_pipe(evidence, comp_input: ComponentInput, assembly_quantity: float) -> ComponentOutput:
     """Shared by Mid Pipe and End Pipe - identical formula (see pipe_calculator), the only
-    difference is which component name/evidence is passed in."""
+    difference is which component name/evidence is passed in.
+
+    Thickness and length are manual-first (a reviewer's typed-in reading always wins), falling
+    back to the CAD detail panel's own OCR-extracted "thk"/"l" fields (drawing_detail_extractor.
+    DIMENSION_LABELS) when no manual value was supplied - previously these two were manual-only
+    even when the drawing's own detail panel already carried them, same gap OD/ID never had."""
     m = comp_input.manual
     od = _evidence_value(evidence, "od")
+    thickness = m.get("thickness")
+    thickness_source = "manual"
+    if thickness is None:
+        thickness = _evidence_value(evidence, "thk")
+        thickness_source = "ocr_detail_panel"
+    length = m.get("length")
+    length_source = "manual"
+    if length is None:
+        length = _evidence_value(evidence, "l")
+        length_source = "ocr_detail_panel"
     dims = pipe_calculator.pipe_dimensions(
-        od, m.get("thickness"), m.get("length"), comp_input.description,
+        od, thickness, length, comp_input.description,
         detail_view=f"{comp_input.description} Detail",
+        extraction_methods={"thickness": thickness_source, "length": length_source},
     )
     return ComponentOutput(
         name=comp_input.description, material=comp_input.material, dimensions=dims,
@@ -133,8 +158,21 @@ def build_sleeve(evidence, comp_input: ComponentInput, assembly_quantity: float)
     interface_reference = m.get("mid_pipe_interface_reference")
     if interface_reference is None:
         interface_reference = _evidence_value(evidence, "od")
+    # Thickness/length: manual-first, falling back to the Sleeve Detail panel's own OCR'd
+    # "thk"/"l" fields when no manual reading was supplied - same fallback pattern as Pipe.
+    thickness = m.get("thickness")
+    thickness_source = "manual"
+    if thickness is None:
+        thickness = _evidence_value(evidence, "thk")
+        thickness_source = "ocr_detail_panel"
+    length = m.get("length")
+    length_source = "manual"
+    if length is None:
+        length = _evidence_value(evidence, "l")
+        length_source = "ocr_detail_panel"
     dims = sleeve_calculator.sleeve_dimensions(
-        od, m.get("thickness"), m.get("length"), mid_pipe_interface_reference=interface_reference, od_source=od_source,
+        od, thickness, length, mid_pipe_interface_reference=interface_reference,
+        od_source=od_source, thickness_source=thickness_source, length_source=length_source,
     )
     return ComponentOutput(
         name=comp_input.description, material=comp_input.material, dimensions=dims,
@@ -146,8 +184,13 @@ def build_sleeve(evidence, comp_input: ComponentInput, assembly_quantity: float)
 def build_housing_flange(evidence, comp_input: ComponentInput, assembly_quantity: float) -> ComponentOutput:
     m = comp_input.manual
     od = _evidence_value(evidence, "od")
+    # Thickness: manual-first, falling back to the detail panel's own OCR'd "thk" field - same
+    # fallback as Pipe/Sleeve, for a drawing where thickness IS printed on the detail panel.
+    thickness = m.get("thickness")
+    if thickness is None:
+        thickness = _evidence_value(evidence, "thk")
     dims = flange_calculator.housing_flange_dimensions(
-        od, m.get("id"), m.get("thickness"), m.get("pcd"), m.get("hole_diameter"),
+        od, m.get("id"), thickness, m.get("pcd"), m.get("hole_diameter"),
         hole_count_drawing=m.get("hole_count_drawing"), hole_count_indent=m.get("hole_count_indent"),
     )
     return ComponentOutput(
