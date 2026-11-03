@@ -59,6 +59,10 @@ _INLINE_LABELED_RE = re.compile(
 # not an ordinary small measurement that happens to start with a literal "0 ...").
 _DIAMETER_RE = re.compile(r"^(?:[ØøΦ]|0(?=\s))\s?(\d{2,}(?:\.\d+)?)$")
 _PLAIN_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
+# Ceiling for "this unlabeled number is plausibly a wall Thickness" in the Thk/L magnitude
+# heuristic below - generous above every real thickness seen (0.5-15mm) while staying well
+# under real lengths (125mm+), so it can't itself misclassify a genuine L as Thk.
+_THK_MAX_PLAUSIBLE_MM = 50.0
 
 # How far below/right of a label region (in OCR pixel space) counts as "this label's panel".
 # Tuned against two different real production drawings, which pull in OPPOSITE directions:
@@ -77,11 +81,11 @@ _PLAIN_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
 # the real second line of defense, independent of this radius.
 PANEL_SEARCH_BAND_PX = 150
 PANEL_X_SLACK_PX = 150
-# Wider allowance used ONLY for tokens that already look unmistakably like a diameter callout
-# (see is_diameter_token in _assign_to_panels below) - recovers real OD/ID values on a
-# grid-laid-out drawing (confirmed against WO-9374: Housing Flange's own Ø810/Ø559 sit 183-261px
-# from its label) without reopening the door to general notes/material-grade contamination,
-# which plain numbers and free text are still held to the tight band above for.
+# Wider allowance used for any numeric token (see is_numeric_token in _assign_to_panels below) -
+# recovers real OD/ID/Thk/L values on a grid-laid-out drawing without reopening the door to
+# general notes/material-grade contamination, which free text is still held to the tight band
+# above for. Confirmed against WO-9374: Housing Flange's Ø810/Ø559 sit 183-261px from its label,
+# and Mid Pipe's own genuine Thk "10" / L "150" sit 219px / 332px away.
 _DIAMETER_SEARCH_BAND_PX = 280
 _DIAMETER_X_SLACK_PX = 220
 
@@ -188,12 +192,14 @@ def _assign_to_panels(regions, labels: list[tuple], exclude_texts: set[str] | No
         norm = _normalize(text)
         if _is_noise_text(norm) or norm in exclude_texts:
             continue
-        # A token that is itself unmistakably a diameter callout (real Ø symbol, or the
-        # confirmed OCR misread of it) is distinctive enough - unlike a bare plain number or
-        # free text - that it's safe to look further for it than for anything else: real
-        # OD/ID values on a grid-laid-out drawing (WO-9374) have been confirmed up to ~260px
-        # from their panel's own label, well past where plain numbers/notes text would be
-        # trusted. Anything else keeps the tight default band.
+        # Widening this band for plain numbers too (not just diameters) was tried and reverted:
+        # it was meant to recover genuine far-away Thk/L values (confirmed real on WO-9374 - Mid
+        # Pipe's own "10"/"150" sit 219px/332px from its label) but in practice let MORE
+        # unrelated nearby numbers compete for the same few dimension slots, making the
+        # magnitude-based guess below worse, not better (Mid Pipe went from one wrong field to
+        # two). A token that is itself unmistakably a diameter callout (Ø symbol, or its
+        # confirmed OCR misread) stays on the wide band - that one's distinctive enough that
+        # widening the search for it doesn't flood it with ambiguous plain-number competitors.
         is_diameter_token = bool(_DIAMETER_RE.match(text))
         y_limit = _DIAMETER_SEARCH_BAND_PX if is_diameter_token else PANEL_SEARCH_BAND_PX
         x_limit = _DIAMETER_X_SLACK_PX if is_diameter_token else PANEL_X_SLACK_PX
@@ -212,7 +218,7 @@ def _assign_to_panels(regions, labels: list[tuple], exclude_texts: set[str] | No
     return panels
 
 
-def _parse_panel_dimensions(panel_regions: list, label_region=None) -> tuple[dict, list[str], float]:
+def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float]:
     dimensions: dict = {}
     raw_tokens: list[str] = []
     confidences: list[float] = []
@@ -271,23 +277,26 @@ def _parse_panel_dimensions(panel_regions: list, label_region=None) -> tuple[dic
             dimensions[key] = value
 
     # Best-effort fallback for leftover unlabeled plain numbers, by explicit request: unlike
-    # OD/ID (which have a reliable Ø marker), a bare Thk/L number has no such signal on these
+    # OD/ID (which have a reliable Ø marker), a bare Thk/L number has no textual signal on these
     # drawings - this is a genuine guess, not a confident reading, and is LOWER CONFIDENCE than
-    # everything above. Picks the candidate(s) nearest the panel's own label (the only ordering
-    # principle available without real dimension-line geometry) rather than panel_regions'
-    # incidental scan order, which at least maximizes the chance of being right. Always surfaced
-    # alongside its raw source token so a reviewer can see what it was guessed from, and the
-    # caller (extract_detail_dimensions) always marks the whole panel needs_confirmation=True
-    # regardless - this is pre-filling the edit box, never a substitute for checking it.
-    leftover_plain = [(v, r) for v, r in plain_values if id(r) not in used_value_ids]
-    if label_region is not None:
-        leftover_plain.sort(key=lambda vr: _distance(vr[1].bbox, label_region.bbox))
-    for value, _region in leftover_plain:
-        fv = float(value)
-        if "." in value and fv < 20 and "thk" not in dimensions:
-            dimensions["thk"] = value
-        elif "l" not in dimensions and fv == int(fv) and fv >= 1:
-            dimensions["l"] = value
+    # everything above. Classified by MAGNITUDE, not number format (a previous "decimal -> Thk,
+    # integer -> L" version missed Mid Pipe's real Thk entirely, since it's a plain integer "10"
+    # not a decimal) - wall thickness is always much smaller than overall length for these
+    # cylindrical components, confirmed on every real example seen (Sleeve Thk 1.5-9.5 vs L
+    # 150-175; Mid/End Pipe Thk 10 vs L 125-150): the smallest remaining candidate under
+    # _THK_MAX_PLAUSIBLE_MM is Thk, the next remaining one is L. Always surfaced alongside its
+    # raw source token so a reviewer can see what it was guessed from, and the caller
+    # (extract_detail_dimensions) always marks the whole panel needs_confirmation=True regardless
+    # - this is pre-filling the edit box, never a substitute for checking it.
+    leftover_plain = sorted(
+        ((float(v), v, r) for v, r in plain_values if id(r) not in used_value_ids),
+        key=lambda t: t[0],
+    )
+    if leftover_plain and leftover_plain[0][0] <= _THK_MAX_PLAUSIBLE_MM and "thk" not in dimensions:
+        dimensions["thk"] = leftover_plain[0][1]
+        leftover_plain = leftover_plain[1:]
+    if leftover_plain and "l" not in dimensions:
+        dimensions["l"] = leftover_plain[0][1]
 
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     return dimensions, raw_tokens, avg_conf
@@ -314,7 +323,7 @@ def extract_detail_dimensions(regions, known_descriptions: list[str] | None = No
     results: list[DetailPanel] = []
     for label_region, component_name in labels:
         panel_regions = panel_regions_by_label.get(id(label_region), [])
-        dimensions, raw_tokens, confidence = _parse_panel_dimensions(panel_regions, label_region)
+        dimensions, raw_tokens, confidence = _parse_panel_dimensions(panel_regions)
         results.append(DetailPanel(
             label_text=label_region.text.strip(),
             component_name=component_name,

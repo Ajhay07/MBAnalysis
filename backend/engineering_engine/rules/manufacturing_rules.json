@@ -1,0 +1,88 @@
+{
+  "_comment": "MB Metallic Bellows manufacturing formulas and allowances. Every allowance that is not a fixed, universally-applicable geometric fact (e.g. a flat-pattern circumference formula) carries an approval_status - the calculation engine refuses to silently treat an 'unapproved' or 'pending' allowance as final; it is applied, labeled, and the result is flagged REVIEW_REQUIRED. Nothing here is invented: every value is transcribed from the manufacturing notes/indent sheet supplied for WO 9374 and must be re-verified before being trusted for a different work order.",
+
+  "bellows": {
+    "blank_length": {
+      "formula": "(od * pi_approx) + allowance_mm",
+      "pi_approx": 3.14,
+      "allowance_mm": 10,
+      "approval_status": "approved",
+      "source": "manufacturing team formula, confirmed against WO 9374 (OD 559 -> 1765mm, matches indent)"
+    },
+    "sheet_width": {
+      "formula": "((pitch_factor * q) + (2 * w)) * n + allowance_mm",
+      "pitch_factor": 0.57,
+      "allowance_mm": 100,
+      "approval_status": "pending_inputs",
+      "source": "manufacturing team formula; q (convolution pitch) and w (convolution depth) are not reliably extractable from the CAD profile and must never be reverse-engineered to force a match to the indent's 340mm reference"
+    },
+    "convolution_count_interpretation": {
+      "note": "CAD drawing shows '5+5' convolutions; provisionally interpreted as N=10 total. Subject to confirmation of MB's own counting convention.",
+      "approval_status": "pending_confirmation"
+    }
+  },
+
+  "shroud": {
+    "circumference_length": {
+      "formula": "od * pi_approx",
+      "pi_approx": 3.14,
+      "approval_status": "approved",
+      "source": "manufacturing team formula (base circumference only, no allowance)"
+    },
+    "length_allowance": {
+      "formula": "base_length + allowance_mm",
+      "allowance_mm": null,
+      "approval_status": "unapproved",
+      "source": "WO 9374's indent (2190mm) exceeds the base circumference (683*3.14=2144.62mm) by ~45.38mm; this gap has not been confirmed as an approved manufacturing allowance by MB and must never be silently assumed. allowance_mm stays null (not 45.38) until approved - set it explicitly once confirmed."
+    }
+  },
+
+  "mid_pipe": {
+    "id_from_od_thickness": {
+      "formula": "od - (2 * thickness)",
+      "approval_status": "approved",
+      "source": "standard pipe wall geometry, no manufacturing allowance"
+    }
+  },
+
+  "end_pipe": {
+    "id_from_od_thickness": {
+      "formula": "od - (2 * thickness)",
+      "approval_status": "approved",
+      "source": "standard pipe wall geometry, no manufacturing allowance"
+    }
+  },
+
+  "sleeve": {
+    "note": "Blank calculation diameter (509mm on WO 9374's indent) is NOT automatically the same reference as the CAD OD (539mm) - the engine must keep od, id/blank_diameter, thickness and length as distinct fields rather than assuming one stands in for another.",
+    "approval_status": "n/a"
+  },
+
+  "housing_flange": {
+    "note": "Dimensions (OD, ID, Thickness, PCD, hole diameter, hole count) come directly from the housing flange CAD detail / indent - no calculation formula. A mismatch between the drawing's own printed hole count/PCD and the indent's must be flagged, never silently corrected in either direction.",
+    "approval_status": "n/a"
+  },
+
+  "limit_rod": {
+    "length_allowance": {
+      "formula": "cad_length + allowance_mm",
+      "allowance_mm": 15,
+      "approval_status": "pending_approval",
+      "source": "manufacturing notes mention an additional 15mm for an unspecified operation; applicability not yet confirmed. Must never be applied to any component other than Limit Rod."
+    }
+  },
+
+  "collar": {
+    "note": "Dimensions come from Detail B's own annotations, never derived from the overall assembly view.",
+    "approval_status": "n/a"
+  },
+
+  "wooden_box": {
+    "length_allowance": {
+      "formula": "assembly_length + allowance_mm",
+      "allowance_mm": 250,
+      "approval_status": "approved_for_length_only",
+      "source": "packaging allowance applies to length only; breadth and width come from the approved packaging layout/clearances, never from the same 250mm formula."
+    }
+  }
+}

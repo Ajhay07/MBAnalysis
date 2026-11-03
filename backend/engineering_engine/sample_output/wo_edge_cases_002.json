@@ -1,0 +1,339 @@
+{
+  "work_order": "EDGE-002",
+  "assembly_quantity": 2,
+  "components": [
+    {
+      "name": "Mid Pipe",
+      "material": "",
+      "final_proposed_dimensions": {
+        "od": null,
+        "thickness": null,
+        "length": 100,
+        "id": null
+      },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "length": 100
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 100,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "id": {
+          "name": "id",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Required inputs not available: od, thickness"
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 1,
+      "total_quantity": 2,
+      "reference_indent_quantity": 2,
+      "quantity_discrepancy": false,
+      "status": "MISSING",
+      "missing_inputs": [
+        "id",
+        "od",
+        "thickness"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Gasket",
+      "material": "Klingersil C-4400",
+      "final_proposed_dimensions": {
+        "classification": "UNCLASSIFIED"
+      },
+      "dimensions_by_source": {
+        "unknown": {
+          "classification": "UNCLASSIFIED"
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "classification": {
+          "name": "classification",
+          "value": "UNCLASSIFIED",
+          "unit": "",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "No registered ComponentSpec matched this description - add one to the registry, or confirm the spelling/alias."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 4,
+      "reference_indent_quantity": 4,
+      "quantity_discrepancy": false,
+      "status": "REVIEW_REQUIRED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "M10 Bolt & Nut",
+      "material": "",
+      "final_proposed_dimensions": {
+        "size": "M10 x 25 lg"
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "M10 x 25 lg"
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "M10 x 25 lg",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 8,
+      "total_quantity": 16,
+      "reference_indent_quantity": 16,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Nut & Locknut",
+      "material": "",
+      "final_proposed_dimensions": {
+        "size": "M20"
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "M20"
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "M20",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 4,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Collar",
+      "material": "",
+      "final_proposed_dimensions": {
+        "diameter": 25,
+        "length": 900
+      },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "diameter": 25,
+          "length": 900
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "diameter": {
+          "name": "diameter",
+          "value": 25,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 900,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 4,
+      "reference_indent_quantity": 6,
+      "quantity_discrepancy": true,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Shroud",
+      "material": "",
+      "final_proposed_dimensions": {
+        "base_length": 1256.0,
+        "length": 1256.0,
+        "width": 150,
+        "thickness": 3
+      },
+      "dimensions_by_source": {
+        "manufacturing_calculated": {
+          "base_length": 1256.0,
+          "length": 1256.0
+        },
+        "manually_supplied": {
+          "width": 150,
+          "thickness": 3
+        }
+      },
+      "reference_indent_dimensions": {
+        "length": 1500
+      },
+      "dimension_detail": {
+        "base_length": {
+          "name": "base_length",
+          "value": 1256.0,
+          "unit": "mm",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "od * 3.14",
+          "inputs": {
+            "od": 400
+          },
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 1256.0,
+          "unit": "mm",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "calculated",
+          "formula": "od * pi_approx (allowance not yet approved)",
+          "inputs": {
+            "base_length": 1256.0,
+            "reference_indent_length": 1500
+          },
+          "source_location": null,
+          "notes": "No approved allowance - allowance_mm is unset in manufacturing_rules.json (WO 9374's indent (2190mm) exceeds the base circumference (683*3.14=2144.62mm) by ~45.38mm; this gap has not been confirmed as an approved manufacturing allowance by MB and must never be silently assumed. allowance_mm stays null (not 45.38) until approved - set it explicitly once confirmed.). Reporting base_length only; the real indent length is a separate, unapproved reference. Gap vs. supplied reference indent length (1500mm): 244.0mm."
+        },
+        "width": {
+          "name": "width",
+          "value": 150,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 3,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        }
+      },
+      "calculation": {
+        "base_length": {
+          "formula": "od * 3.14",
+          "inputs": {
+            "od": 400
+          }
+        },
+        "length": {
+          "formula": "od * pi_approx (allowance not yet approved)",
+          "inputs": {
+            "base_length": 1256.0,
+            "reference_indent_length": 1500
+          }
+        }
+      },
+      "quantity_per_assembly": 1,
+      "total_quantity": 2,
+      "reference_indent_quantity": 2,
+      "quantity_discrepancy": false,
+      "status": "REVIEW_REQUIRED",
+      "missing_inputs": [],
+      "notes": null
+    }
+  ],
+  "diagnostics": {
+    "extraction_available": true,
+    "extraction_error": null,
+    "unclassified_components": [
+      "Gasket"
+    ],
+    "unaccounted_cad_rows": [],
+    "duplicate_spec_matches": {
+      "BOLTS_AND_NUTS": [
+        "M10 Bolt & Nut",
+        "Nut & Locknut"
+      ]
+    }
+  }
+}

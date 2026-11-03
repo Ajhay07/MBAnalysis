@@ -1,0 +1,333 @@
+{
+  "work_order": "SIMPLE-001",
+  "assembly_quantity": 10,
+  "components": [
+    {
+      "name": "Bellows",
+      "material": "A 240 TYP 304L",
+      "final_proposed_dimensions": {
+        "od": null,
+        "length": null,
+        "width": null,
+        "thickness": 1.0,
+        "convolution_count": null
+      },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "thickness": 1.0
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": null,
+          "unit": "mm",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "OD input required for blank length calculation"
+        },
+        "width": {
+          "name": "width",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": "((0.57 * q) + (2 * w)) * n + 100",
+          "inputs": {
+            "pitch_q": null,
+            "depth_w": null,
+            "convolution_count_n": null
+          },
+          "source_location": null,
+          "notes": "Required inputs not available: pitch_q, depth_w, convolution_count_n"
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 1.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": "num_plies * ply_thickness_mm",
+          "inputs": {
+            "num_plies": 2,
+            "ply_thickness_mm": 0.5
+          },
+          "source_location": null,
+          "notes": "Directly specified as a single CAD callout, not independently derived."
+        },
+        "convolution_count": {
+          "name": "convolution_count",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "No convolution callout found on the Bellow detail"
+        }
+      },
+      "calculation": {
+        "width": {
+          "formula": "((0.57 * q) + (2 * w)) * n + 100",
+          "inputs": {
+            "pitch_q": null,
+            "depth_w": null,
+            "convolution_count_n": null
+          }
+        },
+        "thickness": {
+          "formula": "num_plies * ply_thickness_mm",
+          "inputs": {
+            "num_plies": 2,
+            "ply_thickness_mm": 0.5
+          }
+        }
+      },
+      "quantity_per_assembly": 1,
+      "total_quantity": 10,
+      "reference_indent_quantity": 10,
+      "quantity_discrepancy": false,
+      "status": "MISSING",
+      "missing_inputs": [
+        "convolution_count",
+        "length",
+        "od",
+        "width"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Sleeve",
+      "material": "A 240 Gr. 304L",
+      "final_proposed_dimensions": {
+        "od": 219,
+        "thickness": 9.5,
+        "length": 175
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "od": 219,
+          "thickness": 9.5,
+          "length": 175
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 219,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 9.5,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 175,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 1,
+      "total_quantity": 10,
+      "reference_indent_quantity": 10,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "End Pipe",
+      "material": "A 240 Gr. 304L",
+      "final_proposed_dimensions": {
+        "od": null,
+        "thickness": 6,
+        "length": 61,
+        "id": null
+      },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "thickness": 6,
+          "length": 61
+        }
+      },
+      "reference_indent_dimensions": null,
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 6,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 61,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "id": {
+          "name": "id",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Required inputs not available: od"
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 20,
+      "reference_indent_quantity": 20,
+      "quantity_discrepancy": false,
+      "status": "MISSING",
+      "missing_inputs": [
+        "id",
+        "od"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Shroud",
+      "material": "G.I",
+      "final_proposed_dimensions": {
+        "base_length": null,
+        "length": null,
+        "width": 170,
+        "thickness": 2
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "width": 170,
+          "thickness": 2
+        }
+      },
+      "reference_indent_dimensions": {
+        "length": 1900
+      },
+      "dimension_detail": {
+        "base_length": {
+          "name": "base_length",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "OD input required"
+        },
+        "length": {
+          "name": "length",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "base_length required (see calculate_base_circumference)"
+        },
+        "width": {
+          "name": "width",
+          "value": 170,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 2,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually supplied for this work order."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 1,
+      "total_quantity": 10,
+      "reference_indent_quantity": 10,
+      "quantity_discrepancy": false,
+      "status": "MISSING",
+      "missing_inputs": [
+        "base_length",
+        "length"
+      ],
+      "notes": null
+    }
+  ],
+  "diagnostics": {
+    "extraction_available": true,
+    "extraction_error": null,
+    "unclassified_components": [],
+    "unaccounted_cad_rows": [],
+    "duplicate_spec_matches": {}
+  }
+}
