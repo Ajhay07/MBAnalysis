@@ -158,6 +158,117 @@ def _embedded_text_numeric_regions(pdf_path: str, page_number: int) -> list[OcrR
     return regions
 
 
+def _pdf_block_text(block: dict) -> str:
+    return "".join("".join(s.get("text", "") for s in line.get("spans", [])) for line in block.get("lines", [])).strip()
+
+
+def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple[str, str]]) -> dict[str, str]:
+    """{description: material} for a transposed-layout BOM table, using PyMuPDF's own
+    paragraph/block clustering over the PDF's embedded text layer - NOT the rasterized-image
+    OCR regions app.services.bom_table_extractor works from. Traced directly to a real
+    production drawing: a wrapped, multi-line material callout ("IS 2062 E250 Gr.BR / A 515 /
+    516 Gr. 70") that OCR-region pixel-distance heuristics kept truncating or misattributing
+    comes back as ONE clean, already-assembled block from PyMuPDF's own internal text-run
+    clustering - a fundamentally more reliable signal than reconstructing paragraph structure
+    from individual OCR words ourselves.
+
+    `items` is the full BOM row list (description, quantity-as-printed-text) from the ALREADY
+    reliable OCR-region-based extraction (item identification and quantities both come through
+    correctly there - only MATERIAL is unreliable) - used only to anchor each item's true
+    column position by matching its own description text, and to recognize a row's own quantity
+    digit when it's been merged into the same text block as its material (see the "COLLAR"
+    worked example below). Returns {} (never raises) if the PDF has no DESCRIPTION/MATERIAL
+    labels in this layout, or on any PyMuPDF error."""
+    if fitz is None or not items:
+        return {}
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return {}
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return {}
+
+    def norm(s: str) -> str:
+        return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+    desc_label = next((b for b in blocks if _pdf_block_text(b).strip().upper() == "DESCRIPTION"), None)
+    if desc_label is None:
+        return {}
+    desc_x0 = desc_label["bbox"][0]
+    material_label_candidates = [b for b in blocks if b is not desc_label and "MATERIAL" in _pdf_block_text(b).upper()]
+    if not material_label_candidates:
+        return {}
+    material_label = min(material_label_candidates, key=lambda b: abs(b["bbox"][0] - desc_x0))
+    mat_y0 = material_label["bbox"][1]
+    # The material "row": blocks starting at-or-below the MATERIAL label's own top edge, within
+    # a generous band (covers realistic wrapping depth) and left of the unrelated spec-
+    # parameters block that sits much further right on real MB drawings.
+    material_row_candidates = [
+        b for b in blocks
+        if b is not material_label
+        and mat_y0 - 10 <= b["bbox"][1] <= mat_y0 + 150
+        and b["bbox"][0] < 300
+        and len(_pdf_block_text(b)) >= 3
+    ]
+
+    results: dict[str, str] = {}
+    for description, qty_text in items:
+        nd = norm(description)
+        if not nd:
+            continue
+        # The item's own description block, matched by TEXT CONTENT (not position) - far more
+        # reliable than trying to re-derive which block is "this table's column N" from
+        # geometry alone. Requires the match to be a substantial fraction of the description's
+        # own length so a short, unrelated fragment (e.g. a lone view-pane letter "C") can't
+        # spuriously match as a substring of a longer description.
+        candidates = [
+            b for b in blocks
+            if len(norm(_pdf_block_text(b))) >= max(3, len(nd) * 0.6)
+            and (nd in norm(_pdf_block_text(b)) or norm(_pdf_block_text(b)) in nd)
+        ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda b: abs(len(norm(_pdf_block_text(b))) - len(nd)))
+        item_block = candidates[0]
+        raw = _pdf_block_text(item_block)
+        residual = ""
+        if len(raw) > len(description) + 3:
+            # PyMuPDF's own clustering merged this item's description together with its
+            # material (and sometimes its quantity digit) into ONE block - e.g. a real drawing's
+            # Collar row came through as "A 240 Gr. 304COLLAR4" (material + "COLLAR" + "4", no
+            # spaces). Strip the description substring and a trailing quantity digit that
+            # matches this row's own already-known quantity (never an arbitrary trailing digit -
+            # that would just as easily eat the material's own final digits, e.g. the "304" in
+            # "A 240 Gr. 304").
+            residual = re.sub(re.escape(description), "", raw, flags=re.IGNORECASE)
+            if qty_text and residual.endswith(qty_text):
+                residual = residual[: -len(qty_text)]
+            residual = residual.strip()
+        # A real material string on these drawings matches the same ASTM/IS designation pattern
+        # _ENGINEERING_STEEL_RE already looks for elsewhere ("A 240...", "IS 2062..."). Anything
+        # else means this "merged block" guess was actually a false positive - most often a
+        # component whose OWN description is itself truncated by the (separate, OCR-region-
+        # based) item-identification step, e.g. "& NUT" instead of "M8 BOLT & NUT", which fools
+        # the length/substring match above into treating the correctly-matched-but-longer item
+        # block as a merged description+material pair when it's really just the item's own full,
+        # untruncated name ("M8 BOLT" left over after stripping "& NUT" - note this DOES contain
+        # a digit, "8", so a bare digit check alone isn't enough). Falls through to the ordinary
+        # nearest-material-row-by-x lookup instead of accepting a bad guess.
+        if residual and _ENGINEERING_STEEL_RE.search(residual):
+            results[description] = residual
+            continue
+        item_x0 = item_block["bbox"][0]
+        best = min(material_row_candidates, key=lambda b: abs(b["bbox"][0] - item_x0), default=None)
+        if best is not None:
+            results[description] = _pdf_block_text(best)
+    return results
+
+
 def _parse_drawing_quantity_and_nb(ocr_text: str) -> tuple[float | None, float | None]:
     """Reads the drawing's own "QUANTITY" (how many assemblies this drawing covers) and
     "SIZE ( NB )" (nominal bore) title-block fields, when printed. Returns (None, None) for
@@ -352,6 +463,21 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     "A BOM-table-like header row was found, but no body row could be read "
                     "with enough confidence to become a component - add components manually."
                 )
+            elif pdf_path:
+                # Override each component's material with the PDF-structural lookup when it
+                # found one - see _pdf_structural_materials' own docstring for why this is more
+                # reliable than the OCR-region geometry the material came from above. Item
+                # identification/quantity are left untouched; only material is ever replaced,
+                # and only when a lookup actually produced something.
+                items = [
+                    (c.description, f"{c.quantity:g}" if c.quantity is not None else "")
+                    for c in components
+                ]
+                better_materials = _pdf_structural_materials(pdf_path, page_number, items)
+                for c in components:
+                    better = better_materials.get(c.description)
+                    if better:
+                        c.material = better
         else:
             ambiguities.append(Ambiguity(
                 description=(
