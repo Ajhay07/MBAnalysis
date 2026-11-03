@@ -193,34 +193,37 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
     # actually closest to AND inside that item's own half of the gap to its neighbor, never
     # just "whichever item happens to be nearest" with no limit - that unbounded nearest-match
     # is what let a stray, unrelated chunk of page text (found far from every item) attach
-    # itself to the last item (e.g. Collar) when a wide search band swept it in. A value whose
-    # x-center falls before the first item's left slot edge or after the last item's right slot
-    # edge belongs to no item and is dropped, not force-assigned to an end item.
+    # itself to an end item (e.g. Collar) when a wide search band swept it in. A value whose
+    # x-center falls outside every item's slot belongs to no item and is dropped, not
+    # force-assigned to the nearest one regardless of distance.
+    #
+    # Every slot (not just the end ones) is ALSO capped to MAX_SLOT_HALF_WIDTH_FACTOR times the
+    # table's own median inter-item spacing - confirmed necessary on a real drawing where mirroring
+    # Collar's one real neighbor gap (to Nut & Locknut, itself unusually wide) still let a value
+    # that genuinely belonged to a DIFFERENT, further item bleed into Collar's material. Capping
+    # by the table's typical spacing, not any one item's own neighbor gap, keeps every slot
+    # similarly tight regardless of where in the row it sits.
+    MAX_SLOT_HALF_WIDTH_FACTOR = 0.6
     _items_by_x = sorted(item_regions, key=lambda r: _x_center(r.bbox))
+    _centers = [_x_center(it.bbox) for it in _items_by_x]
+    _gaps = [b - a for a, b in zip(_centers, _centers[1:])]
+    if _gaps:
+        _sorted_gaps = sorted(_gaps)
+        mid = len(_sorted_gaps) // 2
+        _median_gap = (
+            _sorted_gaps[mid] if len(_sorted_gaps) % 2
+            else (_sorted_gaps[mid - 1] + _sorted_gaps[mid]) / 2
+        )
+    else:
+        _median_gap = MATERIAL_WRAP_BAND_PX
+    _max_half_width = max(_median_gap, 1.0) * MAX_SLOT_HALF_WIDTH_FACTOR
     _item_slot_bounds: dict[int, tuple[float, float]] = {}
     for idx, it in enumerate(_items_by_x):
-        it_x = _x_center(it.bbox)
-        if idx == 0:
-            # No left neighbor to bound this slot - mirror the (bounded) right half-gap instead
-            # of leaving it open to -inf, so the first item's slot is the same width as its own
-            # gap to the next item, not unlimited. A single-item table (no neighbor either side)
-            # falls back to MATERIAL_WRAP_BAND_PX as a sane finite width.
-            right_gap = (
-                (_x_center(_items_by_x[idx + 1].bbox) - it_x) / 2 if len(_items_by_x) > 1
-                else MATERIAL_WRAP_BAND_PX
-            )
-            left = it_x - right_gap
-        else:
-            left = (_x_center(_items_by_x[idx - 1].bbox) + it_x) / 2
-        if idx == len(_items_by_x) - 1:
-            # Same fix, mirrored: no right neighbor to bound the LAST item's slot - this is
-            # exactly what let a stray, unrelated chunk of page text (found far to the right of
-            # every real item) attach itself to the last item (e.g. Collar) when nothing capped
-            # how far right its slot could extend.
-            left_gap = it_x - left
-            right = it_x + left_gap
-        else:
-            right = (it_x + _x_center(_items_by_x[idx + 1].bbox)) / 2
+        it_x = _centers[idx]
+        left = it_x - _max_half_width if idx == 0 else (_centers[idx - 1] + it_x) / 2
+        right = it_x + _max_half_width if idx == len(_items_by_x) - 1 else (it_x + _centers[idx + 1]) / 2
+        left = max(left, it_x - _max_half_width)
+        right = min(right, it_x + _max_half_width)
         _item_slot_bounds[id(it)] = (left, right)
 
     def _assign_to_item_column(value_region) -> object | None:

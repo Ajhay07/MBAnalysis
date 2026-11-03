@@ -299,6 +299,34 @@ def test_transposed_table_wide_material_band_never_attaches_to_the_last_item_unb
     assert "Total Assembly Weight" not in collar.material
 
 
+def test_transposed_table_slot_cap_applies_even_right_next_to_an_end_item():
+    # Regression: mirroring an end item's own gap to its one real neighbor was still too
+    # permissive - every item's slot (not just the end ones) is now capped to a factor of the
+    # table's own MEDIAN inter-item spacing, so a value sitting closer to an end item than to
+    # any other item, but still well beyond that median-based cap, must be dropped rather than
+    # attached - confirmed against the real drawing, where material genuinely belonging to a
+    # different item still bled into Collar's (the end item's) own material beforehand.
+    desc_y, mat_y = 1800, 2000
+    regions = [
+        _region("DESCRIPTION", 390, desc_y, w=25, h=110),
+        _region("BELLOWS", 413, desc_y, w=25, h=95),
+        _region("END PIPE", 445, desc_y, w=25, h=85),
+        _region("COLLAR", 477, desc_y, w=25, h=75),
+        _region("MATERIAL", 394, mat_y, w=25, h=85),
+        _region("A 240 TYP 304", 418, mat_y, w=25, h=90),
+        _region("A 516 Gr.70", 450, mat_y, w=25, h=90),
+        _region("A 240 Gr. 304", 482, mat_y, w=25, h=90),  # Collar's own, genuine
+        # Well beyond COLLAR's median-spacing-capped slot (median gap here is ~32px, so the cap
+        # is well under 100px) - must belong to no item, not be swept into Collar's anyway.
+        _region("IS 1367 CL 6.8", 650, mat_y, w=25, h=90),
+    ]
+    table = extract_bom_table(regions)
+    assert table is not None
+    collar = next(row for row in table.rows if row.description == "COLLAR")
+    assert collar.material == "A 240 Gr. 304"
+    assert "1367" not in collar.material
+
+
 def test_transposed_table_ignores_a_distant_unrelated_quantity_field_for_qty():
     # Without a genuine nearby QTY label at all, the far-away spec-parameters "QUANTITY" field
     # (the ONLY qty-aliased text anywhere on the page) must not be mistaken for this table's own
