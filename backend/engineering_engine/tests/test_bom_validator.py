@@ -1,4 +1,4 @@
-from engineering_engine.validation.bom_validator import calculate_bom, calculate_total_quantity
+from engineering_engine.validation.bom_validator import calculate_bom, calculate_total_quantity, reference_only_quantity
 
 
 def test_total_quantity_is_plain_multiplication():
@@ -36,3 +36,13 @@ def test_calculate_bom_wo9374_reference_table():
     assert totals["Collar"] == 16
     discrepancies = {r.component for r in results if r.discrepancy}
     assert discrepancies == {"M8 Bolt and Nut"}
+
+
+def test_reference_only_quantity_preserves_indent_qty_with_no_per_assembly_figure():
+    # CORRECTED after review: Filler Wire (84 pcs), Electrode (282 pcs), Stiffener (16 Nos.)
+    # were previously dropped entirely because the CAD BOM has no per-assembly figure for them.
+    result = reference_only_quantity("Filler Wire", 84)
+    assert result.reference_indent_total == 84
+    assert result.quantity_per_assembly is None
+    assert result.calculated_total is None
+    assert result.discrepancy is False

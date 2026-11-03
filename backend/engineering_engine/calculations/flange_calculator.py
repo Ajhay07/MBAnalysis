@@ -51,19 +51,35 @@ def housing_flange_dimensions(
     return results
 
 
-def calculate_limit_rod_length(cad_length: float | None, component: str = "Limit Rod") -> DimensionResult:
+def calculate_limit_rod_length(
+    cad_length: float | None, component: str = "Limit Rod", cad_length_is_inferred: bool = False,
+) -> DimensionResult:
     """final_length = cad_length + allowance_mm (15mm, pending_approval per manufacturing_
     rules.json). Always REVIEW_REQUIRED while pending - never silently treated as final, and
-    never applied to any component other than Limit Rod."""
+    never applied to any component other than Limit Rod.
+
+    `cad_length_is_inferred`: WO 9374 has no Limit Rod CAD detail panel at all, so there is no
+    independent raw-length reading to apply the allowance to - only the indent's own final
+    figure (610mm) is known. When True, `cad_length` was itself derived by subtracting the
+    15mm allowance back out of that final figure (610-15=595) rather than read independently -
+    the formula and result are still reported (per explicit instruction to preserve them), but
+    the note says so plainly so this is never mistaken for an independently-verified input."""
     if cad_length is None:
         return missing("length", component, "cad_length input required")
     rule = load_rules()["limit_rod"]["length_allowance"]
     value = cad_length + rule["allowance_mm"]
+    notes = f"Allowance is {rule['approval_status']}: {rule['source']}"
+    if cad_length_is_inferred:
+        notes += (
+            " cad_length itself is NOT an independent CAD reading - WO 9374 has no Limit Rod "
+            "detail panel; it was derived by subtracting the allowance back out of the indent's "
+            "own final length (610 - 15 = 595), pending a genuine raw CAD measurement."
+        )
     return DimensionResult(
         name="length", value=value, unit="mm", status=DimensionStatus.REVIEW_REQUIRED,
         component=component, extraction_method="calculated",
         formula="cad_length + allowance_mm", inputs={"cad_length": cad_length, "allowance_mm": rule["allowance_mm"]},
-        notes=f"Allowance is {rule['approval_status']}: {rule['source']}",
+        notes=notes,
     )
 
 

@@ -14,9 +14,9 @@ from dataclasses import dataclass
 @dataclass
 class QuantityResult:
     component: str
-    quantity_per_assembly: float
-    number_of_assemblies: float
-    calculated_total: float
+    quantity_per_assembly: float | None
+    number_of_assemblies: float | None
+    calculated_total: float | None
     reference_indent_total: float | None = None
     discrepancy: bool = False
 
@@ -44,6 +44,18 @@ def calculate_total_quantity(
         calculated_total=calculated_total,
         reference_indent_total=reference_indent_total,
         discrepancy=discrepancy,
+    )
+
+
+def reference_only_quantity(component: str, reference_indent_total: float) -> QuantityResult:
+    """For components whose quantity is only ever printed on the indent (e.g. Filler Wire,
+    Electrode, Stiffener), with no per-assembly CAD BOM figure to multiply - previously
+    dropped entirely (quantity_per_assembly=None meant the whole quantity block was skipped).
+    Preserves the reference figure instead of discarding it just because the calculated side
+    is unavailable."""
+    return QuantityResult(
+        component=component, quantity_per_assembly=None, number_of_assemblies=None,
+        calculated_total=None, reference_indent_total=reference_indent_total, discrepancy=False,
     )
 
 

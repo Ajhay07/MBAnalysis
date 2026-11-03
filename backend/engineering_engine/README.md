@@ -116,6 +116,74 @@ kept in the output (`total_quantity: 32`, `reference_indent_quantity: 48`,
 (at construction time) to never carry a value, and every other status is enforced to always
 carry one - see `validation/dimension_validator.py`'s `__post_init__`.
 
+## Corrections from code review (this revision)
+
+1. **Sleeve OD was wrong.** The auto-extractor reads two concentric diameters off the Sleeve
+   Detail panel (Ø539/Ø509) and picks the larger as "od" purely by pixel position - it has no
+   way to know which is which. The real indent gives Sleeve's OD as **509**, not 539. 539 is
+   very likely Mid Pipe's own ID (559 - 2×10 = 539, an exact match) printed near the Sleeve
+   detail as a mating-interface reference. Fixed: `od=509` (manual, matching the indent),
+   `mid_pipe_interface_reference=539` kept as its own field, always `REVIEW_REQUIRED`, never
+   used as Sleeve's OD anywhere.
+2. **Filler Wire (84), Electrode (282), Stiffener (16) quantities were silently dropped**
+   because the CAD BOM has no per-assembly figure for them. Fixed: `bom_validator.
+   reference_only_quantity()` preserves the indent's own quantity even with no calculated side.
+3. **Wooden Box's `assembly_length` (588.2mm) was reverse-engineered from the indent's own 33"
+   reference** (`33*25.4 - 250`) - exactly the circular reasoning this engine must never do.
+   Fixed: no assembly length is supplied; the calculated length is honestly `MISSING`, and
+   33×33×25" is reported only under `reference_indent_dimensions`, never as if calculated.
+4. **Limit Rod's `cad_length` (595mm) is also not an independent reading** - WO 9374 has no
+   Limit Rod CAD detail panel at all, so 595 was derived the same way (610 - 15). Per explicit
+   instruction this calculation IS preserved (595+15=610 matches the indent, stays
+   `REVIEW_REQUIRED`) - but `calculate_limit_rod_length(..., cad_length_is_inferred=True)` now
+   says so plainly in the result's own notes, so it's never mistaken for a verified input.
+5. **Output structure extended** (`output/indent_generator.py`): every component now reports
+   `final_proposed_dimensions` (the engine's own best values), `dimensions_by_source` (grouped
+   by cad_extracted/ocr_extracted/manufacturing_calculated/manually_supplied), and
+   `reference_indent_dimensions` (the indent's own figures, kept structurally separate - e.g.
+   Bellows width's 340mm reference next to its `MISSING` calculated value, Shroud's 2190mm next
+   to the calculated 2144.62mm). Source dimensions are never overwritten by calculated ones.
+
+## Dimension source audit (point 8 of the review)
+
+**No native CAD/DXF extraction exists in this codebase at all** - `cad_extractor.py` always
+raises `NotImplementedError` (no .dxf file has ever been supplied). Everything this engine
+calls "auto-extracted" is **OCR** (PaddleOCR reading the rasterized PDF's detail panels via
+`app.services.drawing_detail_extractor`), not native vector dimension entities. That
+distinction matters: OCR can misread digits and has no ground truth to check itself against,
+which is exactly what produced the Sleeve OD bug above.
+
+| Component | Field | Source | How |
+|---|---|---|---|
+| Bellows | od | **B - OCR** | Ø marker, Bellow Detail panel |
+| Bellows | length | **C - Calculated** | `(od*3.14)+10`, approved |
+| Bellows | thickness | **D - Manual** | transcribed ("1 ply x 0.6mm" CAD callout) |
+| Bellows | width | **MISSING** | q/w not extractable by any method |
+| Bellows | convolution_count | **D - Manual** (text) → **C - Calculated** (10) | "5+5" transcribed, then parsed |
+| Sleeve | od | **D - Manual** | indent SIZE column (509) - NOT trusted from OCR, see correction #1 |
+| Sleeve | thickness, length | **D - Manual** | transcribed from indent |
+| Sleeve | mid_pipe_interface_reference | **B - OCR** | Sleeve Detail panel, unconfirmed identity |
+| Mid Pipe, End Pipe | od | **B - OCR** | Ø marker, own detail panel |
+| Mid Pipe, End Pipe | thickness, length | **D - Manual** | not reliably OCR-extractable (confirmed this session) |
+| Mid Pipe, End Pipe | id | **C - Calculated** | `od - 2*thickness` |
+| Housing Flange | od | **B - OCR** | Ø marker, Housing Flange Detail |
+| Housing Flange | id, thickness, pcd, hole_diameter, hole_count | **D - Manual** | transcribed from indent |
+| Shroud | od | **B - OCR** | Ø marker, Shroud Detail |
+| Shroud | base_length | **C - Calculated** | `od*3.14` |
+| Shroud | length (final) | **C - Calculated, REVIEW_REQUIRED** | base_length only - allowance unapproved |
+| Shroud | width, thickness | **D - Manual** | transcribed from indent |
+| Limit Rod | length | **C - Calculated, REVIEW_REQUIRED** | input itself is inferred (see correction #4) - no CAD panel exists for this component at all |
+| Collar | diameter, length | **D - Manual** | per instruction, must come from Detail B - not independently confirmed as sourced from Detail B specifically in this pass |
+| Nut & Locknut, Shroud Support, M8 Bolt & Nut, Filler Wire, Electrode, Stiffener | size | **D - Manual** | no formula applies per spec; transcribed |
+| Wooden Box | length | **MISSING** | no independent assembly-length source exists anywhere in this pipeline |
+| Wooden Box | breadth, width | **D - Manual** | from indent, "approved packaging layout" not independently verified |
+| All components | quantity_per_assembly | **D - Manual** (CAD BOM reference transcribed into `BOM_REFERENCE`) | not read live from the PDF per-run in this version |
+
+**Bottom line**: only OD/ID-type diameters are genuinely automated (and that's OCR, not native
+CAD parsing). Every Thickness, Length, hole/PCD spec, and all consumable specs are manually
+transcribed for this WO 9374 validation run. The engine's formula layer is real and tested
+independently of extraction - but today, extraction supplies only a fraction of its inputs.
+
 ## What's still open / needs your input
 
 - **Bellows sheet width (340mm)**: needs the convolution pitch (`q`) and depth (`w`) read off
@@ -131,11 +199,41 @@ carry one - see `validation/dimension_validator.py`'s `__post_init__`.
 - **M8 Bolt & Nut quantity**: 32 (CAD BOM) vs 48 (indent) - needs a human to say which is right
   for WO 9374 and whether the CAD BOM or the indent was wrong.
 
+## Generalization status (point 10 of the review: this is not just a WO 9374 reproduction tool)
+
+**Not yet generalized.** `main.py`'s `MANUAL_INPUTS`/`BOM_REFERENCE` dicts are hardcoded to WO
+9374 - this file is a validation harness proving the calculation layer is correct, not a
+general-purpose "upload any drawing" entry point yet. What IS already general-purpose, because
+it was built that way from the start:
+- Every function in `calculations/` takes plain numbers, not a work-order name - `(OD * 3.14) +
+  10` works identically for any Bellows OD.
+- `rules/manufacturing_rules.json` is not WO-9374-specific; it's MB's own standing formulas.
+- `extraction/pdf_extractor.extract_components()` already runs against ANY PDF with a BOM table
+  and detail panels in this drawing family, not just WO 9374 - it was run earlier in this
+  session against 247.pdf (a different work order) during the main app's own testing.
+
+**To actually process a new drawing**, the remaining gap is the glue `main.py` hardcodes today:
+a real integration would call `dimension_parser.get_component_evidence(new_pdf_path)`, match
+each `RawComponentEvidence` to the right calculator by component name (same substring matching
+already used for `find_evidence()`), and route Thickness/Length/etc. to manual-entry prompts
+(not a hardcoded dict) whenever extraction can't supply them - exactly what `REVIEW_REQUIRED`/
+`MISSING` statuses already exist to signal. That routing layer is the next real piece of work,
+not yet built.
+
 ## Integration notes
 
-This package is additive - nothing in `app/` was changed to build it. To wire it into the real
-upload/analyze flow later: `extraction/pdf_extractor.extract_components()` is the integration
-point that already reuses the production OCR pipeline; a router could call
-`main.build_wo9374_components()`-style logic (generalized beyond the WO 9374 hardcoded inputs)
-after a drawing's BOM is generated, and surface `REVIEW_REQUIRED`/`MISSING` results in the
-existing Components/Indent UI the same way `requires_confirmation` already works today.
+This package is additive - the commits that built `engineering_engine/` touch only files under
+that directory (`git show --stat` on commits `3c9af4b` and this review's follow-up confirms
+it). Earlier commits on this same local branch did touch `app/services/drawing_detail_
+extractor.py` and `bom_table_extractor.py` (the Thk/L accuracy investigation from before this
+package existed) - unrelated to this engine and already covered by their own tests. The OD/ID
+OCR pipeline itself (`app.services.paddle_ocr`, `bom_table_extractor`, `drawing_detail_
+extractor`) is called by `pdf_extractor.py`, never modified by it. To wire this into the real upload/analyze flow later:
+`extraction/pdf_extractor.extract_components()` is the integration point that already reuses
+the production OCR pipeline; a router could call a generalized version of `build_wo9374_
+components()` (see "Generalization status" above) after a drawing's BOM is generated, and
+surface `REVIEW_REQUIRED`/`MISSING` results in the existing Components/Indent UI the same way
+`requires_confirmation` already works today.
+
+**Still local-only** (`feature/geometry-based-dimensions` branch) - not merged to `main`, not
+deployed, per instruction. Will not merge or deploy without explicit approval.

@@ -29,8 +29,10 @@ def test_bellows_matches_1765_x_340_x_06_except_width_which_stays_missing():
 
 
 def test_sleeve_matches_509_x_15_x_150():
-    dims = sleeve_calculator.sleeve_dimensions(od=539, blank_diameter=509, thickness=1.5, length=150)
-    assert compare_to_reference(dims["blank_diameter"], 509).matches
+    # CORRECTED after review: indent's Sleeve OD is 509, not the 539 auto-extracted from the
+    # panel (that value is kept separately as mid_pipe_interface_reference, not asserted here).
+    dims = sleeve_calculator.sleeve_dimensions(od=509, thickness=1.5, length=150)
+    assert compare_to_reference(dims["od"], 509).matches
     assert compare_to_reference(dims["thickness"], 1.5).matches
     assert compare_to_reference(dims["length"], 150).matches
 

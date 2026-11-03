@@ -32,6 +32,16 @@ def test_limit_rod_length_applies_pending_allowance_but_flags_it():
     assert "pending_approval" in result.notes
 
 
+def test_limit_rod_cad_length_is_inferred_flag_documents_its_own_provenance():
+    # WO 9374 has no Limit Rod CAD detail panel - cad_length=595 is derived by subtracting the
+    # allowance back out of the indent's own 610, not an independent reading. The formula is
+    # still preserved (by explicit instruction) but the note says so plainly.
+    result = flange_calculator.calculate_limit_rod_length(cad_length=595, cad_length_is_inferred=True)
+    assert result.value == 610
+    assert result.status == DimensionStatus.REVIEW_REQUIRED
+    assert "NOT an independent CAD reading" in result.notes
+
+
 def test_limit_rod_missing_cad_length():
     result = flange_calculator.calculate_limit_rod_length(None)
     assert result.status == DimensionStatus.MISSING

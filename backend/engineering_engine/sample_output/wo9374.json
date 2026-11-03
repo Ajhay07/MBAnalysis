@@ -5,12 +5,27 @@
     {
       "name": "Bellows",
       "material": "A 240 TYP 304",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "od": 559.0,
         "length": 1765,
         "width": null,
         "thickness": 0.6,
         "convolution_count": 10
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "od": 559.0
+        },
+        "manufacturing_calculated": {
+          "length": 1765
+        },
+        "ocr_extracted": {
+          "thickness": 0.6,
+          "convolution_count": 10
+        }
+      },
+      "reference_indent_dimensions": {
+        "width": 340
       },
       "dimension_detail": {
         "od": {
@@ -116,41 +131,41 @@
     {
       "name": "Sleeve",
       "material": "A 240 Gr. 304",
-      "dimensions": {
-        "od": 539.0,
-        "blank_diameter": 509,
+      "final_proposed_dimensions": {
+        "od": 509,
         "thickness": 1.5,
-        "length": 150
+        "length": 150,
+        "mid_pipe_interface_reference": 539.0
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "od": 509,
+          "thickness": 1.5,
+          "length": 150
+        },
+        "ocr_extracted": {
+          "mid_pipe_interface_reference": 539.0
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "od": {
           "name": "od",
-          "value": 539.0,
+          "value": 509,
           "unit": "mm",
           "status": "VERIFIED",
-          "extraction_method": "ocr_detail_panel",
+          "extraction_method": "manual",
           "formula": null,
           "inputs": null,
           "source_location": null,
           "notes": null
-        },
-        "blank_diameter": {
-          "name": "blank_diameter",
-          "value": 509,
-          "unit": "mm",
-          "status": "VERIFIED",
-          "extraction_method": "ocr_detail_panel",
-          "formula": null,
-          "inputs": null,
-          "source_location": null,
-          "notes": "This is the indent's own blank-calculation diameter, not confirmed as the drawing's true bore ID without checking the dimension reference directly."
         },
         "thickness": {
           "name": "thickness",
           "value": 1.5,
           "unit": "mm",
           "status": "VERIFIED",
-          "extraction_method": "ocr_detail_panel",
+          "extraction_method": "manual",
           "formula": null,
           "inputs": null,
           "source_location": null,
@@ -161,11 +176,22 @@
           "value": 150,
           "unit": "mm",
           "status": "VERIFIED",
-          "extraction_method": "ocr_detail_panel",
+          "extraction_method": "manual",
           "formula": null,
           "inputs": null,
           "source_location": null,
           "notes": null
+        },
+        "mid_pipe_interface_reference": {
+          "name": "mid_pipe_interface_reference",
+          "value": 539.0,
+          "unit": "mm",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Auto-extracted from the Sleeve Detail panel as the larger of two concentric diameters (\u00d8539/\u00d8509) by pixel position, NOT by confirmed feature identity. Very likely Mid Pipe's own ID (559 OD - 2*10 thickness = 539, an exact match) printed near the Sleeve detail as a mating-interface reference - never treated as Sleeve's own OD. Confirm against the drawing's dimension references."
         }
       },
       "calculation": null,
@@ -173,19 +199,30 @@
       "total_quantity": 8,
       "reference_indent_quantity": 8,
       "quantity_discrepancy": false,
-      "status": "VERIFIED",
+      "status": "REVIEW_REQUIRED",
       "missing_inputs": [],
       "notes": null
     },
     {
       "name": "Mid Pipe",
       "material": "",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "od": 559.0,
         "thickness": 10,
         "length": 150,
         "id": 539.0
       },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "od": 559.0,
+          "thickness": 10,
+          "length": 150
+        },
+        "manufacturing_calculated": {
+          "id": 539.0
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "od": {
           "name": "od",
@@ -255,12 +292,23 @@
     {
       "name": "End Pipe",
       "material": "A 516 Gr.70",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "od": 559.0,
         "thickness": 10,
         "length": 125,
         "id": 539.0
       },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "od": 559.0,
+          "thickness": 10,
+          "length": 125
+        },
+        "manufacturing_calculated": {
+          "id": 539.0
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "od": {
           "name": "od",
@@ -330,7 +378,7 @@
     {
       "name": "Housing Flange",
       "material": "IS 2062 E250 Gr.BR / A 515/516 Gr. 70",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "od": 810.0,
         "id": 562,
         "thickness": 25,
@@ -338,6 +386,17 @@
         "hole_diameter": 34,
         "hole_count": 2
       },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "od": 810.0,
+          "id": 562,
+          "thickness": 25,
+          "pcd": 734,
+          "hole_diameter": 34,
+          "hole_count": 2
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "od": {
           "name": "od",
@@ -418,11 +477,24 @@
     {
       "name": "Shroud",
       "material": "IS 2062 E250 BR",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "base_length": 2144.62,
         "length": 2144.62,
         "width": 170,
         "thickness": 2
+      },
+      "dimensions_by_source": {
+        "manufacturing_calculated": {
+          "base_length": 2144.62,
+          "length": 2144.62
+        },
+        "manually_supplied": {
+          "width": 170,
+          "thickness": 2
+        }
+      },
+      "reference_indent_dimensions": {
+        "length": 2190
       },
       "dimension_detail": {
         "base_length": {
@@ -501,7 +573,15 @@
     {
       "name": "Limit Rod",
       "material": "IS 1367 Cl. 6.8",
-      "dimensions": {
+      "final_proposed_dimensions": {
+        "length": 610
+      },
+      "dimensions_by_source": {
+        "manufacturing_calculated": {
+          "length": 610
+        }
+      },
+      "reference_indent_dimensions": {
         "length": 610
       },
       "dimension_detail": {
@@ -517,7 +597,7 @@
             "allowance_mm": 15
           },
           "source_location": null,
-          "notes": "Allowance is pending_approval: manufacturing notes mention an additional 15mm for an unspecified operation; applicability not yet confirmed. Must never be applied to any component other than Limit Rod."
+          "notes": "Allowance is pending_approval: manufacturing notes mention an additional 15mm for an unspecified operation; applicability not yet confirmed. Must never be applied to any component other than Limit Rod. cad_length itself is NOT an independent CAD reading - WO 9374 has no Limit Rod detail panel; it was derived by subtracting the allowance back out of the indent's own final length (610 - 15 = 595), pending a genuine raw CAD measurement."
         }
       },
       "calculation": {
@@ -540,10 +620,17 @@
     {
       "name": "Collar",
       "material": "A 240 TYP 304",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "diameter": 20,
         "length": 1790
       },
+      "dimensions_by_source": {
+        "ocr_extracted": {
+          "diameter": 20,
+          "length": 1790
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "diameter": {
           "name": "diameter",
@@ -580,9 +667,15 @@
     {
       "name": "Nut & Locknut",
       "material": "IS 1367 Cl. 6.0",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "M30"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "M30"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -608,9 +701,15 @@
     {
       "name": "Shroud Support",
       "material": "IS 2062 E250 BR",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "60x60x6 Angle - 40 lg"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "60x60x6 Angle - 40 lg"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -636,9 +735,15 @@
     {
       "name": "M8 Bolt & Nut",
       "material": "IS 1367 Cl.6.8/6.0",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "M8 x 20 lg"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "M8 x 20 lg"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -664,9 +769,15 @@
     {
       "name": "Filler Wire",
       "material": "",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "ER 309 - \u00d82.4 x 1000"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "ER 309 - \u00d82.4 x 1000"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -683,7 +794,7 @@
       "calculation": null,
       "quantity_per_assembly": null,
       "total_quantity": null,
-      "reference_indent_quantity": null,
+      "reference_indent_quantity": 84,
       "quantity_discrepancy": false,
       "status": "VERIFIED",
       "missing_inputs": [],
@@ -692,9 +803,15 @@
     {
       "name": "Electrode",
       "material": "",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "E 6013 - \u00d84 x 450"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "E 6013 - \u00d84 x 450"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -711,7 +828,7 @@
       "calculation": null,
       "quantity_per_assembly": null,
       "total_quantity": null,
-      "reference_indent_quantity": null,
+      "reference_indent_quantity": 282,
       "quantity_discrepancy": false,
       "status": "VERIFIED",
       "missing_inputs": [],
@@ -720,9 +837,15 @@
     {
       "name": "Stiffener",
       "material": "IS 2062",
-      "dimensions": {
+      "final_proposed_dimensions": {
         "size": "40x40x6 Angle - 490 lg"
       },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "size": "40x40x6 Angle - 490 lg"
+        }
+      },
+      "reference_indent_dimensions": null,
       "dimension_detail": {
         "size": {
           "name": "size",
@@ -739,7 +862,7 @@
       "calculation": null,
       "quantity_per_assembly": null,
       "total_quantity": null,
-      "reference_indent_quantity": null,
+      "reference_indent_quantity": 16,
       "quantity_discrepancy": false,
       "status": "VERIFIED",
       "missing_inputs": [],
@@ -748,25 +871,33 @@
     {
       "name": "Wooden Box",
       "material": "",
-      "dimensions": {
-        "length": 33.0,
+      "final_proposed_dimensions": {
+        "length": null,
+        "breadth": 33,
+        "width": 25
+      },
+      "dimensions_by_source": {
+        "manually_supplied": {
+          "breadth": 33,
+          "width": 25
+        }
+      },
+      "reference_indent_dimensions": {
+        "length": 33,
         "breadth": 33,
         "width": 25
       },
       "dimension_detail": {
         "length": {
           "name": "length",
-          "value": 33.0,
-          "unit": "in",
-          "status": "CALCULATED",
-          "extraction_method": "calculated",
-          "formula": "assembly_length + allowance_mm",
-          "inputs": {
-            "assembly_length": 588.1999999999999,
-            "allowance_mm": 250
-          },
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": null,
+          "inputs": null,
           "source_location": null,
-          "notes": "Calculated in mm (manufacturing_rules.json), converted to inches to match the indent's own unit."
+          "notes": "assembly_length input required"
         },
         "breadth": {
           "name": "breadth",
@@ -791,21 +922,15 @@
           "notes": "From approved packaging layout/clearances, not the length allowance formula."
         }
       },
-      "calculation": {
-        "length": {
-          "formula": "assembly_length + allowance_mm",
-          "inputs": {
-            "assembly_length": 588.1999999999999,
-            "allowance_mm": 250
-          }
-        }
-      },
+      "calculation": null,
       "quantity_per_assembly": 4,
       "total_quantity": 4,
       "reference_indent_quantity": 4,
       "quantity_discrepancy": false,
-      "status": "CALCULATED",
-      "missing_inputs": [],
+      "status": "MISSING",
+      "missing_inputs": [
+        "length"
+      ],
       "notes": null
     }
   ]
