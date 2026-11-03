@@ -38,6 +38,10 @@ _SCALE_RE = re.compile(r"\bSCALE\.?\s*[:\-]?\s*(\d+\s*[:\-]\s*\d+)", re.IGNORECA
 _TITLE_RE = re.compile(r"\bTITLE\.?\s*[:\-]\s*([A-Za-z0-9 ,./\-]{2,80})", re.IGNORECASE)
 _UNITS_MM_RE = re.compile(r"\b(ALL\s+DIM(?:ENSION)?S?\s+(?:IN|ARE\s+IN)\s+MM|\bMM\b)", re.IGNORECASE)
 _UNITS_IN_RE = re.compile(r"\b(ALL\s+DIM(?:ENSION)?S?\s+(?:IN|ARE\s+IN)\s+(?:INCH|IN)\b|\bINCH(?:ES)?\b)", re.IGNORECASE)
+# "WO No. 9374" / "W.O. No.: 9374" - the work order this drawing was issued for, distinct from
+# the drawing's own drawing_number (e.g. "3C/25812/MB/25-26"). Seen verbatim on the WO 9374
+# family of drawings, printed as a note rather than in the formal title-block grid.
+_WO_NUMBER_RE = re.compile(r"\bW\.?O\.?\s*No\.?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\-/]{1,19})", re.IGNORECASE)
 
 # --- Dimension/callout patterns --------------------------------------------------------------
 _DIM_PATTERNS = [
@@ -100,6 +104,7 @@ def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
     scale = ""
     title = ""
     units = "mm"
+    wo_number = ""
     for line in ocr_text.splitlines():
         if not rev or rev == "A":
             m = _REV_RE.search(line)
@@ -117,6 +122,10 @@ def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
             m = _TITLE_RE.search(line)
             if m:
                 title = m.group(1).strip().rstrip(",.")
+        if not wo_number:
+            m = _WO_NUMBER_RE.search(line)
+            if m:
+                wo_number = m.group(1).strip().rstrip(",.")
     if _UNITS_IN_RE.search(ocr_text) and not _UNITS_MM_RE.search(ocr_text):
         units = "in"
     drawing_quantity, nb_size_mm = _parse_drawing_quantity_and_nb(ocr_text)
@@ -129,6 +138,7 @@ def _parse_title_block(ocr_text: str, drawing_number: str) -> TitleBlock:
         material_spec=material_spec,
         drawing_quantity=drawing_quantity,
         nb_size_mm=nb_size_mm,
+        wo_number=wo_number,
     )
 
 

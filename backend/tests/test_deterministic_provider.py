@@ -95,6 +95,26 @@ def test_missing_quantity_and_nb_fields_stay_none_not_guessed(monkeypatch):
     assert result.title_block.nb_size_mm is None
 
 
+def test_wo_number_parsed_from_title_block(monkeypatch):
+    """The real WO-9374-family drawings print "WO No. 9374" as a free-standing note - this
+    feeds the frontend's auto-filled Generate Indent Sheet form (wo_number), same as
+    drawing_quantity/nb_size_mm already do for assembly quantity/required-on."""
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)
+    ocr_text = "SOME NOTE\nWO No. 9374\nANOTHER NOTE\n"
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text=ocr_text, drawing_number="DWG-4")
+    assert result.title_block.wo_number == "9374"
+
+
+def test_wo_number_missing_stays_empty_not_guessed(monkeypatch):
+    monkeypatch.setattr(
+        "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)
+    provider = DeterministicProvider()
+    result = provider.analyze(image_path="x.png", ocr_text=SAMPLE_OCR_TEXT, drawing_number="DWG-5")
+    assert result.title_block.wo_number == ""
+
+
 def test_dimension_patterns_extracted_from_text(monkeypatch):
     monkeypatch.setattr(
         "app.providers.deterministic_provider.cv2.imread", lambda *_a, **_kw: None)

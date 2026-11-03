@@ -90,6 +90,25 @@ def lines_from_bom(db: Session, bom: Bom, assembly_quantity: float) -> list[dict
                 if formatted:
                     size_text = formatted
         wt_qty = None if li.quantity is None else float(li.quantity) * float(assembly_quantity)
+        # A component whose BOM-table QTY cell couldn't be read gets quantity_basis="assumed"
+        # and a fallback per-assembly quantity of 1 (app.providers.deterministic_provider /
+        # app.services.bom_candidate_service) - that 1 is a PLACEHOLDER, not a real reading, so
+        # wt_qty is never None here and this line would otherwise print a confident-looking
+        # "<assembly_quantity> Nos" for a quantity nobody actually confirmed. Flag it the same
+        # way as a genuinely missing quantity (requires_confirmation=True, a note, and - on the
+        # PDF - the orange TBD-style highlight) rather than letting a guess look verified.
+        quantity_is_assumed = component is not None and component.quantity_basis == "assumed"
+        requires_confirmation = wt_qty is None or quantity_is_assumed
+        if wt_qty is None:
+            note = "BOM line item has no per-assembly quantity on file."
+        elif quantity_is_assumed:
+            note = (
+                f"Quantity could not be read from the drawing's BOM table - showing the "
+                f"fallback value of 1 per assembly ({wt_qty:g} total). Confirm the real quantity "
+                f"before this indent is issued."
+            )
+        else:
+            note = ""
         mtl_spec = li.description
         if li.material:
             mtl_spec = f"{li.description}\n{li.material}" if li.description else li.material
@@ -101,8 +120,8 @@ def lines_from_bom(db: Session, bom: Bom, assembly_quantity: float) -> list[dict
             "bom_line_item_id": li.id,
             "indent_rule_id": None,
             "source": "bom_line",
-            "requires_confirmation": wt_qty is None,
-            "note": "" if wt_qty is not None else "BOM line item has no per-assembly quantity on file.",
+            "requires_confirmation": requires_confirmation,
+            "note": note,
         })
     return out
 

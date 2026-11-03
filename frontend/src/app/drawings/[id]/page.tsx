@@ -878,10 +878,12 @@ export default function DrawingViewerPage() {
                   const tb = (activeAnalysis?.title_block ?? {}) as Record<string, unknown>;
                   const drawingQty = tb.drawing_quantity;
                   const nbSize = tb.nb_size_mm;
+                  const woNumber = tb.wo_number as string | undefined;
                   setIndentForm((f) => ({
                     ...f,
                     assembly_quantity: f.assembly_quantity || (drawingQty != null ? String(drawingQty) : ""),
                     required_on: f.required_on || (nbSize != null ? `${nbSize} NB` : ""),
+                    wo_number: f.wo_number || woNumber || "",
                   }));
                   setShowIndentForm(true);
                 }}

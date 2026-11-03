@@ -53,6 +53,11 @@ class TitleBlock(BaseModel):
     # doesn't need those retyped by hand; still overridable per generation.
     drawing_quantity: float | None = None
     nb_size_mm: float | None = None
+    # Read from the title block's own "WO No." / "W.O. No." field (see
+    # _parse_title_block's _WO_NUMBER_RE) - the work order this drawing was issued for, when
+    # printed. Feeds the indent generator's wo_number default so it doesn't need retyping by
+    # hand for a drawing that already states it; still overridable per generation.
+    wo_number: str = ""
 
 
 class DimensionFinding(BaseModel):

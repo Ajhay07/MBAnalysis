@@ -46,6 +46,15 @@ def _make_9347_bom(db):
             analysis_id=analysis.id, description=description, material=material, quantity=qty,
             dimensions=dims, make_buy=MakeBuy.BUY, confidence=0.9, verification_status="Verified",
             source_text=f"{description} {material} qty {qty}",
+            # This fixture's quantities are the drawing's own confirmed BOM-table values (see
+            # the module docstring), not a fallback guess - quantity_basis="explicit_callout"
+            # reflects that, same as app.providers.deterministic_provider would set it for a
+            # row whose QTY cell really was read. Component.quantity_basis defaults to
+            # "assumed" (the conservative default for a row built any other way), which is
+            # exactly what app.services.indent_service now checks to flag an indent line's
+            # quantity for confirmation - leaving it at that default here would mislabel this
+            # fixture's genuinely-known quantities as unconfirmed guesses.
+            quantity_basis="explicit_callout",
         ))
     db.commit()
     db.refresh(analysis)
