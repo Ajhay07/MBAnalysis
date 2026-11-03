@@ -656,6 +656,7 @@ export default function DrawingViewerPage() {
                               </div>
                             </div>
                             <input
+                              key={`desc:${c.id}:${c.description}`}
                               type="text"
                               className="input !w-full !py-0.5 !px-1.5 !text-sm !font-normal"
                               defaultValue={c.description}
@@ -667,6 +668,7 @@ export default function DrawingViewerPage() {
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="text-xs text-steel w-9 shrink-0">Size:</span>
                               <input
+                                key={`size:${c.id}:${formatSizeText(c.dimensions)}`}
                                 type="text"
                                 className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
                                 placeholder="not extracted - enter manually, e.g. OD 219  Thk 9.5"
@@ -682,6 +684,7 @@ export default function DrawingViewerPage() {
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="text-xs text-steel w-9 shrink-0">Material:</span>
                               <input
+                                key={`material:${c.id}:${c.material}`}
                                 type="text"
                                 className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
                                 placeholder="material n/a"
@@ -695,6 +698,7 @@ export default function DrawingViewerPage() {
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="text-xs text-steel w-9 shrink-0">Qty:</span>
                               <input
+                                key={`qty:${c.id}:${c.quantity}`}
                                 type="number"
                                 step="any"
                                 className="input !w-20 !py-0.5 !px-1.5 !text-xs"
@@ -724,6 +728,7 @@ export default function DrawingViewerPage() {
                               <div className="flex items-center gap-1.5 mt-1">
                                 <span className="text-xs text-steel w-9 shrink-0" title="Overrides for the Bellows/Shroud formula, e.g. od=559 num_plies=1 ply_thickness_mm=0.6 - editing this recalculates automatically.">Calc:</span>
                                 <input
+                                  key={`calc:${c.id}:${formatCalcInputsText(c.calc_inputs)}`}
                                   type="text"
                                   className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1 font-mono"
                                   placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
@@ -826,6 +831,7 @@ export default function DrawingViewerPage() {
                             <td className="td !px-2 font-medium whitespace-nowrap">{c.part_number || "—"}</td>
                             <td className="td !px-2 text-steel">
                               <input
+                                key={`desc:${c.id}:${c.description}`}
                                 type="text"
                                 className="input !w-36 !py-0.5 !px-1.5 !text-xs"
                                 defaultValue={c.description}
@@ -837,6 +843,7 @@ export default function DrawingViewerPage() {
                             </td>
                             <td className="td !px-2 text-steel">
                               <input
+                                key={`material:${c.id}:${c.material}`}
                                 type="text"
                                 className="input !w-32 !py-0.5 !px-1.5 !text-xs"
                                 placeholder="material n/a"
@@ -849,6 +856,7 @@ export default function DrawingViewerPage() {
                             </td>
                             <td className="td !px-2 text-steel">
                               <input
+                                key={`size:${c.id}:${formatSizeText(c.dimensions)}`}
                                 type="text"
                                 className="input !w-32 !py-0.5 !px-1.5 !text-xs"
                                 placeholder="not extracted"
@@ -863,6 +871,7 @@ export default function DrawingViewerPage() {
                             </td>
                             <td className="td !px-2 text-right">
                               <input
+                                key={`qty:${c.id}:${c.quantity}`}
                                 type="number"
                                 step="any"
                                 className="input !w-16 !py-0.5 !px-1.5 !text-xs text-right"
@@ -897,6 +906,7 @@ export default function DrawingViewerPage() {
                               {isBellowsOrShroud(c.description) ? (
                                 <>
                                   <input
+                                    key={`calc:${c.id}:${formatCalcInputsText(c.calc_inputs)}`}
                                     type="text"
                                     className="input !w-40 !py-0.5 !px-1.5 !text-xs font-mono"
                                     placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
