@@ -1,0 +1,812 @@
+{
+  "work_order": "9374",
+  "assembly_quantity": 4,
+  "components": [
+    {
+      "name": "Bellows",
+      "material": "A 240 TYP 304",
+      "dimensions": {
+        "od": 559.0,
+        "length": 1765,
+        "width": null,
+        "thickness": 0.6,
+        "convolution_count": 10
+      },
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 559.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "OD read from the CAD Bellow Detail (\u00d8 marker, auto-extracted)."
+        },
+        "length": {
+          "name": "length",
+          "value": 1765,
+          "unit": "mm",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "(od * 3.14) + 10",
+          "inputs": {
+            "od": 559.0
+          },
+          "source_location": null,
+          "notes": "raw=1765.26mm before rounding. manufacturing team formula, confirmed against WO 9374 (OD 559 -> 1765mm, matches indent)"
+        },
+        "width": {
+          "name": "width",
+          "value": null,
+          "unit": "",
+          "status": "MISSING",
+          "extraction_method": "",
+          "formula": "((0.57 * q) + (2 * w)) * n + 100",
+          "inputs": {
+            "pitch_q": null,
+            "depth_w": null,
+            "convolution_count_n": 10
+          },
+          "source_location": null,
+          "notes": "Required inputs not available: pitch_q, depth_w"
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 0.6,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": "num_plies * ply_thickness_mm",
+          "inputs": {
+            "num_plies": 1,
+            "ply_thickness_mm": 0.6
+          },
+          "source_location": null,
+          "notes": "Directly specified as a single CAD callout, not independently derived."
+        },
+        "convolution_count": {
+          "name": "convolution_count",
+          "value": 10,
+          "unit": "count",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": {
+            "raw_callout": "5+5 NO. OF CONVOLUTES"
+          },
+          "source_location": null,
+          "notes": "CAD drawing shows '5+5' convolutions; provisionally interpreted as N=10 total. Subject to confirmation of MB's own counting convention."
+        }
+      },
+      "calculation": {
+        "length": {
+          "formula": "(od * 3.14) + 10",
+          "inputs": {
+            "od": 559.0
+          }
+        },
+        "width": {
+          "formula": "((0.57 * q) + (2 * w)) * n + 100",
+          "inputs": {
+            "pitch_q": null,
+            "depth_w": null,
+            "convolution_count_n": 10
+          }
+        },
+        "thickness": {
+          "formula": "num_plies * ply_thickness_mm",
+          "inputs": {
+            "num_plies": 1,
+            "ply_thickness_mm": 0.6
+          }
+        }
+      },
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "MISSING",
+      "missing_inputs": [
+        "width"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Sleeve",
+      "material": "A 240 Gr. 304",
+      "dimensions": {
+        "od": 539.0,
+        "blank_diameter": 509,
+        "thickness": 1.5,
+        "length": 150
+      },
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 539.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "blank_diameter": {
+          "name": "blank_diameter",
+          "value": 509,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "This is the indent's own blank-calculation diameter, not confirmed as the drawing's true bore ID without checking the dimension reference directly."
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 1.5,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 150,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Mid Pipe",
+      "material": "",
+      "dimensions": {
+        "od": 559.0,
+        "thickness": 10,
+        "length": 150,
+        "id": 539.0
+      },
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 559.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 10,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 150,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "id": {
+          "name": "id",
+          "value": 539.0,
+          "unit": "mm",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "od - (2 * thickness)",
+          "inputs": {
+            "od": 559.0,
+            "thickness": 10
+          },
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": {
+        "id": {
+          "formula": "od - (2 * thickness)",
+          "inputs": {
+            "od": 559.0,
+            "thickness": 10
+          }
+        }
+      },
+      "quantity_per_assembly": 1,
+      "total_quantity": 4,
+      "reference_indent_quantity": 4,
+      "quantity_discrepancy": false,
+      "status": "CALCULATED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "End Pipe",
+      "material": "A 516 Gr.70",
+      "dimensions": {
+        "od": 559.0,
+        "thickness": 10,
+        "length": 125,
+        "id": 539.0
+      },
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 559.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 10,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 125,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "id": {
+          "name": "id",
+          "value": 539.0,
+          "unit": "mm",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "od - (2 * thickness)",
+          "inputs": {
+            "od": 559.0,
+            "thickness": 10
+          },
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": {
+        "id": {
+          "formula": "od - (2 * thickness)",
+          "inputs": {
+            "od": 559.0,
+            "thickness": 10
+          }
+        }
+      },
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "CALCULATED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Housing Flange",
+      "material": "IS 2062 E250 Gr.BR / A 515/516 Gr. 70",
+      "dimensions": {
+        "od": 810.0,
+        "id": 562,
+        "thickness": 25,
+        "pcd": 734,
+        "hole_diameter": 34,
+        "hole_count": 2
+      },
+      "dimension_detail": {
+        "od": {
+          "name": "od",
+          "value": 810.0,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "id": {
+          "name": "id",
+          "value": 562,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 25,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "pcd": {
+          "name": "pcd",
+          "value": 734,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "hole_diameter": {
+          "name": "hole_diameter",
+          "value": 34,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "hole_count": {
+          "name": "hole_count",
+          "value": 2,
+          "unit": "count",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Only one of drawing/indent hole count was supplied - the other should be checked."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "REVIEW_REQUIRED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Shroud",
+      "material": "IS 2062 E250 BR",
+      "dimensions": {
+        "base_length": 2144.62,
+        "length": 2144.62,
+        "width": 170,
+        "thickness": 2
+      },
+      "dimension_detail": {
+        "base_length": {
+          "name": "base_length",
+          "value": 2144.62,
+          "unit": "mm",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "od * 3.14",
+          "inputs": {
+            "od": 683.0
+          },
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 2144.62,
+          "unit": "mm",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "calculated",
+          "formula": "od * pi_approx (allowance not yet approved)",
+          "inputs": {
+            "base_length": 2144.62,
+            "reference_indent_length": 2190
+          },
+          "source_location": null,
+          "notes": "No approved allowance - allowance_mm is unset in manufacturing_rules.json (WO 9374's indent (2190mm) exceeds the base circumference (683*3.14=2144.62mm) by ~45.38mm; this gap has not been confirmed as an approved manufacturing allowance by MB and must never be silently assumed. allowance_mm stays null (not 45.38) until approved - set it explicitly once confirmed.). Reporting base_length only; the real indent length is a separate, unapproved reference. Gap vs. supplied reference indent length (2190mm): 45.38mm."
+        },
+        "width": {
+          "name": "width",
+          "value": 170,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        },
+        "thickness": {
+          "name": "thickness",
+          "value": 2,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": {
+        "base_length": {
+          "formula": "od * 3.14",
+          "inputs": {
+            "od": 683.0
+          }
+        },
+        "length": {
+          "formula": "od * pi_approx (allowance not yet approved)",
+          "inputs": {
+            "base_length": 2144.62,
+            "reference_indent_length": 2190
+          }
+        }
+      },
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "REVIEW_REQUIRED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Limit Rod",
+      "material": "IS 1367 Cl. 6.8",
+      "dimensions": {
+        "length": 610
+      },
+      "dimension_detail": {
+        "length": {
+          "name": "length",
+          "value": 610,
+          "unit": "mm",
+          "status": "REVIEW_REQUIRED",
+          "extraction_method": "calculated",
+          "formula": "cad_length + allowance_mm",
+          "inputs": {
+            "cad_length": 595,
+            "allowance_mm": 15
+          },
+          "source_location": null,
+          "notes": "Allowance is pending_approval: manufacturing notes mention an additional 15mm for an unspecified operation; applicability not yet confirmed. Must never be applied to any component other than Limit Rod."
+        }
+      },
+      "calculation": {
+        "length": {
+          "formula": "cad_length + allowance_mm",
+          "inputs": {
+            "cad_length": 595,
+            "allowance_mm": 15
+          }
+        }
+      },
+      "quantity_per_assembly": 2,
+      "total_quantity": 8,
+      "reference_indent_quantity": 8,
+      "quantity_discrepancy": false,
+      "status": "REVIEW_REQUIRED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Collar",
+      "material": "A 240 TYP 304",
+      "dimensions": {
+        "diameter": 20,
+        "length": 1790
+      },
+      "dimension_detail": {
+        "diameter": {
+          "name": "diameter",
+          "value": 20,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        },
+        "length": {
+          "name": "length",
+          "value": 1790,
+          "unit": "mm",
+          "status": "VERIFIED",
+          "extraction_method": "ocr_detail_panel",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": null
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 4,
+      "total_quantity": 16,
+      "reference_indent_quantity": 16,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Nut & Locknut",
+      "material": "IS 1367 Cl. 6.0",
+      "dimensions": {
+        "size": "M30"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "M30",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 16,
+      "total_quantity": 64,
+      "reference_indent_quantity": 64,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Shroud Support",
+      "material": "IS 2062 E250 BR",
+      "dimensions": {
+        "size": "60x60x6 Angle - 40 lg"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "60x60x6 Angle - 40 lg",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 8,
+      "total_quantity": 32,
+      "reference_indent_quantity": 32,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "M8 Bolt & Nut",
+      "material": "IS 1367 Cl.6.8/6.0",
+      "dimensions": {
+        "size": "M8 x 20 lg"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "M8 x 20 lg",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": 8,
+      "total_quantity": 32,
+      "reference_indent_quantity": 48,
+      "quantity_discrepancy": true,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Filler Wire",
+      "material": "",
+      "dimensions": {
+        "size": "ER 309 - \u00d82.4 x 1000"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "ER 309 - \u00d82.4 x 1000",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": null,
+      "total_quantity": null,
+      "reference_indent_quantity": null,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Electrode",
+      "material": "",
+      "dimensions": {
+        "size": "E 6013 - \u00d84 x 450"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "E 6013 - \u00d84 x 450",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": null,
+      "total_quantity": null,
+      "reference_indent_quantity": null,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Stiffener",
+      "material": "IS 2062",
+      "dimensions": {
+        "size": "40x40x6 Angle - 490 lg"
+      },
+      "dimension_detail": {
+        "size": {
+          "name": "size",
+          "value": "40x40x6 Angle - 490 lg",
+          "unit": "",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+        }
+      },
+      "calculation": null,
+      "quantity_per_assembly": null,
+      "total_quantity": null,
+      "reference_indent_quantity": null,
+      "quantity_discrepancy": false,
+      "status": "VERIFIED",
+      "missing_inputs": [],
+      "notes": null
+    },
+    {
+      "name": "Wooden Box",
+      "material": "",
+      "dimensions": {
+        "length": 33.0,
+        "breadth": 33,
+        "width": 25
+      },
+      "dimension_detail": {
+        "length": {
+          "name": "length",
+          "value": 33.0,
+          "unit": "in",
+          "status": "CALCULATED",
+          "extraction_method": "calculated",
+          "formula": "assembly_length + allowance_mm",
+          "inputs": {
+            "assembly_length": 588.1999999999999,
+            "allowance_mm": 250
+          },
+          "source_location": null,
+          "notes": "Calculated in mm (manufacturing_rules.json), converted to inches to match the indent's own unit."
+        },
+        "breadth": {
+          "name": "breadth",
+          "value": 33,
+          "unit": "in",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "From approved packaging layout/clearances, not the length allowance formula."
+        },
+        "width": {
+          "name": "width",
+          "value": 25,
+          "unit": "in",
+          "status": "VERIFIED",
+          "extraction_method": "manual",
+          "formula": null,
+          "inputs": null,
+          "source_location": null,
+          "notes": "From approved packaging layout/clearances, not the length allowance formula."
+        }
+      },
+      "calculation": {
+        "length": {
+          "formula": "assembly_length + allowance_mm",
+          "inputs": {
+            "assembly_length": 588.1999999999999,
+            "allowance_mm": 250
+          }
+        }
+      },
+      "quantity_per_assembly": 4,
+      "total_quantity": 4,
+      "reference_indent_quantity": 4,
+      "quantity_discrepancy": false,
+      "status": "CALCULATED",
+      "missing_inputs": [],
+      "notes": null
+    }
+  ]
+}
