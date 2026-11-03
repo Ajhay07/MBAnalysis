@@ -212,7 +212,7 @@ def _assign_to_panels(regions, labels: list[tuple], exclude_texts: set[str] | No
     return panels
 
 
-def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float]:
+def _parse_panel_dimensions(panel_regions: list, label_region=None) -> tuple[dict, list[str], float]:
     dimensions: dict = {}
     raw_tokens: list[str] = []
     confidences: list[float] = []
@@ -270,14 +270,24 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
         if key:
             dimensions[key] = value
 
-    # Deliberately NO fallback here for leftover unlabeled plain numbers ("a lone decimal is
-    # probably Thk", "a lone integer is probably L"). Tried and reverted: on real drawings, the
-    # genuine Thk/L values are themselves usually unlabeled too, so this heuristic had no real
-    # signal to distinguish them from an unrelated nearby number (a notes fragment, another
-    # component's own dimension) - confirmed wrong on both WO-9374's Mid Pipe (L shown as "15"/
-    # dim_3/dim_4 noise instead of the real 150) and Bellow (Thk/L both actually belonged to the
-    # neighboring Sleeve panel). An OD/ID-only result a reviewer fills the rest of in by hand is
-    # more useful than a confident-looking wrong Thk/L.
+    # Best-effort fallback for leftover unlabeled plain numbers, by explicit request: unlike
+    # OD/ID (which have a reliable Ø marker), a bare Thk/L number has no such signal on these
+    # drawings - this is a genuine guess, not a confident reading, and is LOWER CONFIDENCE than
+    # everything above. Picks the candidate(s) nearest the panel's own label (the only ordering
+    # principle available without real dimension-line geometry) rather than panel_regions'
+    # incidental scan order, which at least maximizes the chance of being right. Always surfaced
+    # alongside its raw source token so a reviewer can see what it was guessed from, and the
+    # caller (extract_detail_dimensions) always marks the whole panel needs_confirmation=True
+    # regardless - this is pre-filling the edit box, never a substitute for checking it.
+    leftover_plain = [(v, r) for v, r in plain_values if id(r) not in used_value_ids]
+    if label_region is not None:
+        leftover_plain.sort(key=lambda vr: _distance(vr[1].bbox, label_region.bbox))
+    for value, _region in leftover_plain:
+        fv = float(value)
+        if "." in value and fv < 20 and "thk" not in dimensions:
+            dimensions["thk"] = value
+        elif "l" not in dimensions and fv == int(fv) and fv >= 1:
+            dimensions["l"] = value
 
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     return dimensions, raw_tokens, avg_conf
@@ -304,7 +314,7 @@ def extract_detail_dimensions(regions, known_descriptions: list[str] | None = No
     results: list[DetailPanel] = []
     for label_region, component_name in labels:
         panel_regions = panel_regions_by_label.get(id(label_region), [])
-        dimensions, raw_tokens, confidence = _parse_panel_dimensions(panel_regions)
+        dimensions, raw_tokens, confidence = _parse_panel_dimensions(panel_regions, label_region)
         results.append(DetailPanel(
             label_text=label_region.text.strip(),
             component_name=component_name,

@@ -66,17 +66,17 @@ def test_unlabeled_diameter_values_fall_back_to_od_then_id():
     assert end_pipe.dimensions["od"] == "559"
 
 
-def test_unlabeled_plain_number_is_never_guessed_as_thk_or_l():
-    # Regression: a bare, unlabeled number near a panel used to be guessed as Thk (small
-    # decimal) or L (plain integer) by convention. Reverted - on real drawings the genuine
-    # Thk/L values are themselves usually unlabeled too, so this had no real signal to tell a
-    # true Thk/L apart from an unrelated nearby number (confirmed wrong on WO-9374's Mid Pipe
-    # and Bellow panels). Only OD/ID (from an unambiguous Ø-prefixed token) and explicitly
-    # labeled values (an adjacent "L"/"THK" text region, or inline "L150") are ever reported.
+def test_unlabeled_plain_number_is_guessed_as_l_by_request_despite_lower_confidence():
+    # By explicit product decision: unlike OD/ID (which have a reliable Ø marker), a bare Thk/L
+    # number has no such signal on these drawings, and this guess has been confirmed wrong on
+    # real drawings (WO-9374's Mid Pipe/Bellow panels). Still always attempted - never silently
+    # trusted though: extract_detail_dimensions always marks the panel needs_confirmation=True,
+    # and the Size field stays directly editable either way.
     regions = [_r("END PIPE DETAIL", 100, 100), _r("Ø559", 120, 140), _r("125", 120, 170)]
     panels = extract_detail_dimensions(regions)
     end_pipe = next(p for p in panels if p.component_name == "END PIPE")
-    assert end_pipe.dimensions == {"od": "559"}
+    assert end_pipe.dimensions == {"od": "559", "l": "125"}
+    assert end_pipe.needs_confirmation is True
 
 
 def test_panel_with_no_nearby_numbers_is_flagged_for_confirmation():
