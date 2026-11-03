@@ -11,11 +11,12 @@ instruction - not merged to `main`, not deployed. Run it yourself with:
 ```powershell
 cd backend
 .\venv\Scripts\Activate.ps1
-python -m pytest engineering_engine/tests -q      # 41 unit tests
-python -m engineering_engine.main                 # prints the WO 9374 JSON to stdout
+python -m pytest engineering_engine/tests -q      # 66 unit tests
+python -m engineering_engine.main                 # WO 9374, via the generalized routing pipeline
 ```
 
-Sample output for WO 9374 is saved at `engineering_engine/sample_output/wo9374.json`.
+Sample output: `engineering_engine/sample_output/wo9374.json`,
+`wo_simple_001.json`, `wo_edge_cases_002.json` (the two synthetic fixtures).
 
 ## Why this exists
 
@@ -31,11 +32,18 @@ calculation layer.
 ## Architecture
 
 ```
-CAD Drawing (PDF) → extraction/ → RawComponentEvidence → calculations/ → DimensionResult
-                                                                 ↓
-                                                   validation/ (status, BOM qty, discrepancies)
-                                                                 ↓
-                                                   output/indent_generator.py → JSON
+WorkOrderInputs (routing/work_order_inputs.py)
+        ↓
+routing/pipeline.py: for each ComponentInput →
+    extraction/pdf_extractor.py → RawComponentEvidence (OD/ID, if a PDF was supplied)
+        ↓
+    routing/registry.classify_component() → ComponentSpec (or UNCLASSIFIED)
+        ↓
+    routing/component_builders.py → calls the matching calculations/*.py function(s)
+        ↓
+    validation/ → DimensionResult(s) with status, BOM qty + discrepancy checking
+        ↓
+output/indent_generator.py → one JSON per work order, + a diagnostics block
 ```
 
 ```
@@ -53,13 +61,20 @@ engineering_engine/
         manufacturing_rules.json   # every allowance/formula constant, with approval_status
     validation/
         dimension_validator.py  # DimensionStatus enum + DimensionResult dataclass
-        bom_validator.py        # qty_per_assembly * assemblies, + discrepancy flagging
+        bom_validator.py        # qty_per_assembly * assemblies, + discrepancy/reference-only qty
         calculation_validator.py  # compares a result to a reference value, never forces a match
     output/
-        indent_generator.py  # assembles DimensionResults into the spec's JSON shape
-    tests/                   # 41 unit tests, one file per calculator + a reference-table pass
-    sample_output/wo9374.json
-    main.py                  # builds + prints the WO 9374 indent JSON
+        indent_generator.py  # assembles DimensionResults into the JSON shape (+ by-source breakdown)
+    routing/                 # NEW: the generalized pipeline (see below)
+        registry.py           # ComponentSpec catalog + classify_component()
+        component_builders.py # one adapter per spec, calls the EXISTING calculators
+        work_order_inputs.py  # WorkOrderInputs/ComponentInput - how a new WO is defined
+        pipeline.py            # process_work_order() - the single entry point
+    fixtures/                 # NEW: synthetic WorkOrderInputs for routing tests
+        wo_simple_001.py, wo_edge_cases_002.py
+    tests/                   # 66 unit tests: calculators, validation, registry, routing pipeline
+    sample_output/           # wo9374.json, wo_simple_001.json, wo_edge_cases_002.json
+    main.py                  # WO 9374 as a WorkOrderInputs, run through routing.pipeline
 ```
 
 **Separation of concerns, as required**: every function in `calculations/` is pure - plain
@@ -116,7 +131,108 @@ kept in the output (`total_quantity: 32`, `reference_indent_quantity: 48`,
 (at construction time) to never carry a value, and every other status is enforced to always
 carry one - see `validation/dimension_validator.py`'s `__post_init__`.
 
-## Corrections from code review (this revision)
+## Generalized routing layer (this revision)
+
+**Status: implemented and tested, local-only.** `main.py` no longer contains any WO-9374-
+specific logic - it defines WO 9374 as a `WorkOrderInputs` object and runs it through the same
+generalized pipeline any other work order uses. Two synthetic fixtures (`fixtures/
+wo_simple_001.py`, `fixtures/wo_edge_cases_002.py`) prove the routing logic itself generalizes;
+WO 9374 remains the only real-drawing-verified case (see "Generalization status" further down
+for what that distinction actually means).
+
+```
+Drawing Input (PDF path, optional)
+    │
+    ▼
+Drawing Extraction          extraction/pdf_extractor.py - reuses app.services' OCR pipeline,
+    │                        unmodified. Degrades to "no evidence" if unavailable, never crashes.
+    ▼
+Component Identification    routing/pipeline.py matches each WorkOrderInputs entry's
+    │                        description to CAD-extracted evidence by substring (OCR-tolerant)
+    ▼
+Component Classification    routing/registry.classify_component() - alias match against the
+    │                        14-entry ComponentSpec registry. None -> reported as UNCLASSIFIED,
+    │                        never dropped, never guessed.
+    ▼
+Parameter Mapping           routing/component_builders.py - one adapter per spec, pulls od/id
+    │                        from evidence, everything else from WorkOrderInputs.manual
+    ▼
+Manufacturing Rule Selection  implicit in which builder/calculator ran - rules themselves come
+    │                        from rules/manufacturing_rules.json, same file regardless of WO
+    ▼
+Dimension Calculation       calculations/*.py - UNCHANGED, called by the builders
+    ▼
+Engineering Validation      validation/dimension_validator.py - UNCHANGED
+    ▼
+BOM Quantity Calculation    validation/bom_validator.py - UNCHANGED (+ new reference_only_
+    │                        quantity() for components with no per-assembly figure)
+    ▼
+Indent JSON Generation      output/indent_generator.py - UNCHANGED, + a new top-level
+                             "diagnostics" block (unclassified/unaccounted/duplicate matches)
+```
+
+### Component registry (14 entries, per the spec's list)
+
+| Identifier | Aliases (examples) | Calculator | Required parameters |
+|---|---|---|---|
+| BELLOWS | BELLOW, BELLOWS | `bellows_calculator` | od |
+| SHROUD | SHROUD | `shroud_calculator` | od |
+| MID_PIPE | MID PIPE, MIDPIPE | `pipe_calculator` | od, thickness |
+| END_PIPE | END PIPE, ENDPIPE | `pipe_calculator` | od, thickness |
+| SLEEVE | SLEEVE, SLEEV (OCR-truncated) | `sleeve_calculator` | od |
+| HOUSING_FLANGE | HOUSING FLANGE, FLANGE | `flange_calculator.housing_flange_dimensions` | od, id, thickness, pcd, hole_diameter |
+| LIMIT_ROD | LIMIT ROD | `flange_calculator.calculate_limit_rod_length` | cad_length |
+| COLLAR | COLLAR | `flange_calculator.collar_dimensions` | diameter, length |
+| SHROUD_SUPPORT | SHROUD SUPPORT | pass-through | size |
+| STIFFENER | STIFFENER | pass-through | size |
+| WOODEN_BOX | WOODEN BOX, PACKING/PACKAGING BOX | `packaging_calculator` | assembly_length_mm |
+| BOLTS_AND_NUTS | NUT AND LOCKNUT, BOLT AND NUT, M8 BOLT, ... | pass-through | size |
+| FILLER_WIRE | FILLER WIRE | pass-through | size |
+| ELECTRODE | ELECTRODE | pass-through | size |
+
+Full detail (optional parameters, extraction sources, validation requirements) is available
+programmatically via `routing.registry.list_registered_components()`.
+
+### How classification works
+
+`classify_component()` normalizes the BOM row's description (uppercase, "&"→"AND", periods
+stripped) and matches it against every spec's aliases - exact match first, then substring
+either direction (tolerating OCR truncation like "SLEEV"), with the LONGEST matching alias
+winning ties. A genuinely tied match, or no match at all, returns `None` - the row is reported
+as `UNCLASSIFIED` in the output, never silently dropped or guessed into the wrong spec.
+
+### How a new work order is added
+
+A new work order is a new `WorkOrderInputs` object (see `fixtures/wo_simple_001.py` for a
+minimal example) - never a code change to `routing/`. It needs: a work order name, assembly
+quantity, optional CAD PDF path, and a list of `ComponentInput` entries (description, material,
+manual parameter readings, reference indent values, and quantity). Run it with:
+
+```python
+from engineering_engine.routing.pipeline import process_work_order
+output = process_work_order(my_work_order_inputs)
+```
+
+### Multi-component-type test results
+
+```
+$ python -m pytest engineering_engine/tests -q
+66 passed in ~18s   (43 existing calculator/validation tests + 23 new routing/registry tests)
+
+$ python -m pytest -q    # full backend suite, from backend/
+257 passed, 2 skipped    (191 existing app tests + 66 engineering_engine tests)
+```
+
+Covers every scenario the review asked for: multiple work orders (WO 9374 + 2 synthetic),
+different component combinations (4-component vs. 15-component BOMs), component
+classification (exact/truncated/unknown/ambiguous), rule selection (same unapproved-Shroud-
+allowance rule applied identically across two different work orders - proving it's not WO-
+9374-specific), missing parameters, unapproved allowances, duplicate component
+classification (two BOM rows -> one spec, kept as separate output entries), BOM quantity
+discrepancies (both the real WO 9374 one and a synthetic one), unknown components, and
+explicit-override routing for ambiguous/mis-OCR'd descriptions.
+
+## Corrections from code review (previous revision)
 
 1. **Sleeve OD was wrong.** The auto-extractor reads two concentric diameters off the Sleeve
    Detail panel (Ø539/Ø509) and picks the larger as "od" purely by pixel position - it has no
@@ -201,24 +317,28 @@ independently of extraction - but today, extraction supplies only a fraction of 
 
 ## Generalization status (point 10 of the review: this is not just a WO 9374 reproduction tool)
 
-**Not yet generalized.** `main.py`'s `MANUAL_INPUTS`/`BOM_REFERENCE` dicts are hardcoded to WO
-9374 - this file is a validation harness proving the calculation layer is correct, not a
-general-purpose "upload any drawing" entry point yet. What IS already general-purpose, because
-it was built that way from the start:
-- Every function in `calculations/` takes plain numbers, not a work-order name - `(OD * 3.14) +
-  10` works identically for any Bellows OD.
-- `rules/manufacturing_rules.json` is not WO-9374-specific; it's MB's own standing formulas.
-- `extraction/pdf_extractor.extract_components()` already runs against ANY PDF with a BOM table
-  and detail panels in this drawing family, not just WO 9374 - it was run earlier in this
-  session against 247.pdf (a different work order) during the main app's own testing.
+**The routing layer described above is now built and tested** - `main.py` is a `WorkOrderInputs`
+definition run through the same `routing.pipeline.process_work_order()` any work order uses; no
+WO-9374-specific branching exists anywhere in `routing/`. That is real, tested generalization of
+the ROUTING logic (classification, rule selection, duplicate/unknown handling, output shape).
 
-**To actually process a new drawing**, the remaining gap is the glue `main.py` hardcodes today:
-a real integration would call `dimension_parser.get_component_evidence(new_pdf_path)`, match
-each `RawComponentEvidence` to the right calculator by component name (same substring matching
-already used for `find_evidence()`), and route Thickness/Length/etc. to manual-entry prompts
-(not a hardcoded dict) whenever extraction can't supply them - exactly what `REVIEW_REQUIRED`/
-`MISSING` statuses already exist to signal. That routing layer is the next real piece of work,
-not yet built.
+**What is still NOT generalized - be precise about this distinction:**
+- **Extraction accuracy beyond OD/ID remains exactly where it was.** The routing layer changes
+  *how* a Thickness/Length/PCD/etc. gets into the system (now a `ComponentInput.manual` field on
+  a `WorkOrderInputs` object, not a hardcoded dict) - it does not make those values any more
+  extractable than they were. For a genuinely new drawing, someone still has to supply those
+  manually, exactly as WO 9374's own `wo_9374_inputs()` does.
+- **Only one real drawing (WO 9374) has been run through this**, end to end, with its result
+  checked against a real indent sheet. The two new fixtures (`fixtures/wo_simple_001.py`,
+  `fixtures/wo_edge_cases_002.py`) are **synthetic** - built specifically to exercise routing
+  edge cases (unknown component, missing parameter, duplicate classification, quantity
+  discrepancy), not derived from real drawings. They prove the routing code path works
+  correctly; they do NOT prove this generalizes to real-world new drawings, which may have
+  component names, layouts, or conventions the 14-entry registry/alias list hasn't seen yet.
+- `extraction/pdf_extractor.extract_components()` itself is unchanged by this work - it already
+  ran against a different real work order (247.pdf) during the main app's own testing earlier
+  this session, so the OCR/BOM-table layer underneath the routing layer was already somewhat
+  drawing-independent; this revision doesn't add to that, it just wires it in generically.
 
 ## Integration notes
 

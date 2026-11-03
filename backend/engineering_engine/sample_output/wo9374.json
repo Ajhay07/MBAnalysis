@@ -13,15 +13,13 @@
         "convolution_count": 10
       },
       "dimensions_by_source": {
-        "manually_supplied": {
-          "od": 559.0
+        "ocr_extracted": {
+          "od": 559.0,
+          "thickness": 0.6,
+          "convolution_count": 10
         },
         "manufacturing_calculated": {
           "length": 1765
-        },
-        "ocr_extracted": {
-          "thickness": 0.6,
-          "convolution_count": 10
         }
       },
       "reference_indent_dimensions": {
@@ -33,11 +31,11 @@
           "value": 559.0,
           "unit": "mm",
           "status": "VERIFIED",
-          "extraction_method": "manual",
+          "extraction_method": "ocr_detail_panel",
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "OD read from the CAD Bellow Detail (\u00d8 marker, auto-extracted)."
+          "notes": "OD read from the CAD Bellow Detail (\u00d8 marker)."
         },
         "length": {
           "name": "length",
@@ -533,7 +531,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         },
         "thickness": {
           "name": "thickness",
@@ -544,7 +542,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": {
@@ -686,7 +684,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -720,7 +718,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -754,7 +752,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -788,7 +786,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -822,7 +820,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -856,7 +854,7 @@
           "formula": null,
           "inputs": null,
           "source_location": null,
-          "notes": "Manually transcribed - not reliably auto-extractable on this drawing family."
+          "notes": "Manually supplied for this work order."
         }
       },
       "calculation": null,
@@ -923,7 +921,7 @@
         }
       },
       "calculation": null,
-      "quantity_per_assembly": 4,
+      "quantity_per_assembly": 1,
       "total_quantity": 4,
       "reference_indent_quantity": 4,
       "quantity_discrepancy": false,
@@ -933,5 +931,20 @@
       ],
       "notes": null
     }
-  ]
+  ],
+  "diagnostics": {
+    "extraction_available": true,
+    "extraction_error": null,
+    "unclassified_components": [],
+    "unaccounted_cad_rows": [
+      "JUT & LOCKNUT",
+      "IROUD SUPPORT"
+    ],
+    "duplicate_spec_matches": {
+      "BOLTS_AND_NUTS": [
+        "Nut & Locknut",
+        "M8 Bolt & Nut"
+      ]
+    }
+  }
 }
