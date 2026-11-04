@@ -40,6 +40,29 @@ function formatSizeText(dimensions: Record<string, unknown> | null | undefined):
   return parts.join("  ");
 }
 
+// Mirrors backend/app/services/calc_engine_service.py:format_bellows_or_shroud_size_text - "L x
+// W x T"-style text (MB's own convention for these two component types - see the physical
+// indent sheet) from a component's own calc_result, when it has one. Only the dimensions
+// actually computed appear; a missing one (e.g. Bellows' width, which this drawing family never
+// prints anywhere extractable) is simply left out rather than padded with a placeholder.
+function formatCalcSizeText(calcResult: Component["calc_result"]): string {
+  const dims = calcResult?.final_proposed_dimensions as Record<string, unknown> | undefined;
+  if (!dims) return "";
+  return (["length", "width", "thickness"] as const)
+    .map((k) => dims[k])
+    .filter((v) => v !== null && v !== undefined)
+    .join(" x ");
+}
+
+// What the Size field actually shows: for Bellows/Shroud, MB's own Length x Width x Thickness
+// reading (from the manufacturing formula - see compute_bellows_or_shroud_result) once it has
+// one, since the plain OD/Thk/L extraction below is the wrong shape entirely for these two
+// sheet-metal parts; every other component type (and a Bellows/Shroud with nothing calculated
+// yet) keeps the plain extracted-dimensions text, same as always.
+function displaySizeText(c: Component): string {
+  return formatCalcSizeText(c.calc_result) || formatSizeText(c.dimensions);
+}
+
 // Client-side mirror of engineering_engine.routing.registry's BELLOWS/SHROUD alias match - only
 // these two component types have a real manufacturing formula (see
 // app.services.calc_engine_service.compute_bellows_or_shroud_result), so only they get the
@@ -668,14 +691,15 @@ export default function DrawingViewerPage() {
                             <div className="flex items-center gap-1.5 mt-1">
                               <span className="text-xs text-steel w-9 shrink-0">Size:</span>
                               <input
-                                key={`size:${c.id}:${formatSizeText(c.dimensions)}`}
+                                key={`size:${c.id}:${displaySizeText(c)}`}
                                 type="text"
                                 className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
                                 placeholder="not extracted - enter manually, e.g. OD 219  Thk 9.5"
-                                defaultValue={formatSizeText(c.dimensions)}
+                                defaultValue={displaySizeText(c)}
+                                title={formatCalcSizeText(c.calc_result) ? "Length x Width x Thickness, from the Bellows/Shroud formula below - edit Calc: to change it." : undefined}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
-                                  if (text !== formatSizeText(c.dimensions)) {
+                                  if (text !== displaySizeText(c)) {
                                     updateComponent(c, { dimensions: text ? { size: text } : {} });
                                   }
                                 }}
@@ -856,14 +880,15 @@ export default function DrawingViewerPage() {
                             </td>
                             <td className="td !px-2 text-steel">
                               <input
-                                key={`size:${c.id}:${formatSizeText(c.dimensions)}`}
+                                key={`size:${c.id}:${displaySizeText(c)}`}
                                 type="text"
                                 className="input !w-32 !py-0.5 !px-1.5 !text-xs"
                                 placeholder="not extracted"
-                                defaultValue={formatSizeText(c.dimensions)}
+                                defaultValue={displaySizeText(c)}
+                                title={formatCalcSizeText(c.calc_result) ? "Length x Width x Thickness, from the Bellows/Shroud formula - edit Calc: to change it." : undefined}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
-                                  if (text !== formatSizeText(c.dimensions)) {
+                                  if (text !== displaySizeText(c)) {
                                     updateComponent(c, { dimensions: text ? { size: text } : {} });
                                   }
                                 }}
