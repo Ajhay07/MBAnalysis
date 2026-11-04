@@ -494,20 +494,17 @@ def _pdf_structural_detail_panels(pdf_path: str, page_number: int, known_descrip
 
 def _merge_detail_panels(ocr_panels: list, structural_panels: list) -> list:
     """Combines OCR-region-based and PDF-structural-text-based detail panels for the same page,
-    keyed by component_name. A structural panel's own dimension values always win over an OCR
-    panel's for the same key (far more reliable source - see _pdf_structural_detail_panels);
-    an OCR-only key (from a panel structural text never found at all) is preserved rather than
-    discarded, so this never loses a reading, only ever improves on one."""
+    keyed by component_name. When the structural pass found ANY panel for a component, its
+    dimensions REPLACE the OCR panel's entirely for that component (not a key-by-key merge) -
+    confirmed necessary on a real drawing: Housing Flange's OCR panel had picked up a spurious
+    "l" value (actually End Pipe's own L, bled in from a neighboring panel at OCR-pixel
+    resolution) that a key-by-key merge would otherwise have let survive forever, since the
+    structural pass correctly finds no "l" for Housing Flange at all (it has none) and so never
+    had a value to overwrite that stale one with. The OCR panel is kept only as a whole fallback
+    for a component the structural pass found no panel for at all."""
+    structural_by_name = {p.component_name: p for p in structural_panels}
     by_name = {p.component_name: p for p in ocr_panels}
-    for sp in structural_panels:
-        existing = by_name.get(sp.component_name)
-        if existing is None:
-            by_name[sp.component_name] = sp
-            continue
-        merged_dimensions = dict(existing.dimensions)
-        merged_dimensions.update(sp.dimensions)
-        existing.dimensions = merged_dimensions
-        existing.raw_tokens = list(dict.fromkeys(existing.raw_tokens + sp.raw_tokens))
+    by_name.update(structural_by_name)
     return list(by_name.values())
 
 

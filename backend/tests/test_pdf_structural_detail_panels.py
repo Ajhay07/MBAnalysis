@@ -3,11 +3,12 @@ panels (OD/ID/Thk/L) from PyMuPDF's PDF-text-block clustering, as a more reliabl
 image-region OCR for the OD/ID/Thk/L fields PaddleOCR has been unreliable on (confirmed: OD/ID
 were already coming through correctly via the existing OCR-region path, but Thk/L were not).
 
-Verified directly against the real WO 9374 production drawing: every one of its 6 named detail
+Verified directly against the real WO 9374 production drawing (and against the hand-filled
+physical indent sheet made from it, the actual ground truth): every one of its 6 named detail
 panels came through with the correct OD and, where present, the correct ID/Thk/L too (End Pipe
-Thk=10/L=125, Mid Pipe Thk=10/L=150, Sleeve OD=539/ID=509/Thk=1.5/L=150, Shroud OD=683/Thk=15/
-L=170, Housing Flange OD=810/ID=559/Thk=25) - a dramatic improvement over the OCR-region path,
-which was confirmed to leave Thk/L blank or wrong for most of these same panels.
+Thk=10/L=125, Mid Pipe Thk=10/L=150, Sleeve OD=509/Thk=1.5/L=150, Shroud OD=683/Thk=15/L=170,
+Housing Flange OD=810/ID=559/Thk=25) - a dramatic improvement over the OCR-region path, which was
+confirmed to leave Thk/L blank or wrong for most of these same panels.
 
 This drawing family lays its detail panels out in vertical lanes, where a label sits at its own
 lane's left edge and its OWN values sit well to its right (offset ~50-150pt) - while an
@@ -78,6 +79,26 @@ def test_excludes_a_tall_narrow_block_that_reads_like_a_number(tmp_path):
     assert panels[0].dimensions.get("thk") == "10"
     assert "65" not in panels[0].raw_tokens
     assert "l" not in panels[0].dimensions
+
+
+def test_rejects_a_second_diameter_far_from_the_panels_other_values(tmp_path):
+    # Reproduces the real WO 9374 Sleeve case: the panel's REAL own diameter (509) sits close to
+    # its other confirmed values (150, 1.5), while a second, unrelated Ø reading (539) sits far
+    # from all of them. The old size-descending OD/ID auto-pairing would have picked the larger
+    # one (539) as OD - wrong; a real OD/ID pair for one feature prints close together (confirmed
+    # on Housing Flange: under 15pt apart), so two diameters this far apart (90pt here) are
+    # treated as NOT a genuine pair, and only the one near the panel's actual value cluster (509)
+    # is kept.
+    blocks = _page_blocks(tmp_path, [
+        ("SLEEVE DETAIL", (30, 150)),
+        ("0 539", (80, 70)),
+        ("150", (100, 120)),
+        ("1.5", (120, 140)),
+        ("0 509", (140, 160)),
+    ], label_fontsize=100)
+    panels = extract_detail_dimensions_from_pdf_blocks(blocks)
+    assert panels[0].dimensions.get("od") == "509"
+    assert "id" not in panels[0].dimensions
 
 
 def test_returns_empty_list_with_no_blocks():

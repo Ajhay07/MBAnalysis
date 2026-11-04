@@ -63,6 +63,11 @@ _PLAIN_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
 # heuristic below - generous above every real thickness seen (0.5-15mm) while staying well
 # under real lengths (125mm+), so it can't itself misclassify a genuine L as Thk.
 _THK_MAX_PLAUSIBLE_MM = 50.0
+# Two diameters printed this far apart (in Y) are treated as NOT a genuine OD/ID pair for the
+# same feature - see the diameter-pairing block in _parse_panel_dimensions for the real-drawing
+# evidence behind this (Housing Flange's real pair sits ~13.5pt apart; Sleeve's own real OD sits
+# 60+pt from an unrelated second Ø reading).
+_DIAMETER_PAIR_MAX_Y_GAP_PT = 30.0
 
 # How far below/right of a label region (in OCR pixel space) counts as "this label's panel".
 # Tuned against two different real production drawings, which pull in OPPOSITE directions:
@@ -271,6 +276,26 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
     # than guessed.
     remaining_diameters = [(v, r) for v, r in diameter_values]
     remaining_diameters.sort(key=lambda vr: -float(vr[0]))
+    if len(remaining_diameters) >= 2:
+        gap = abs(_y_center(remaining_diameters[0][1].bbox) - _y_center(remaining_diameters[1][1].bbox))
+        if gap > _DIAMETER_PAIR_MAX_Y_GAP_PT:
+            # Two diameters that genuinely both belong to the SAME feature (a real OD/ID pair)
+            # are printed close together on these drawings (confirmed on a real drawing: Housing
+            # Flange's own OD=810/ID=559 sit under 15pt apart) - two diameters this far apart are
+            # far more likely two UNRELATED values that each merely landed in this panel's
+            # candidate set (confirmed on a real drawing: Sleeve's own OD=509 sits 60+pt from a
+            # second, unrelated Ø reading nowhere near it) than a genuine pair for one feature.
+            # Keep only whichever one sits closest to this panel's OTHER already-accepted values
+            # (it belongs to the same cluster the diameter pairing above can't see) - that one
+            # real diameter, not a fabricated guess at which of the two is "right".
+            other_y = [_y_center(region.bbox) for _val, region in plain_values]
+            if other_y:
+                centroid_y = sum(other_y) / len(other_y)
+                remaining_diameters = [min(
+                    remaining_diameters[:2], key=lambda vr: abs(_y_center(vr[1].bbox) - centroid_y)
+                )]
+            else:
+                remaining_diameters = remaining_diameters[:1]
     for value, _region in remaining_diameters[:2]:
         key = "od" if "od" not in dimensions else ("id" if "id" not in dimensions else None)
         if key:
