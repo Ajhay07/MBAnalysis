@@ -3,7 +3,7 @@ BOM row's own SIZE cell already had any text (even just an OD reading): the matc
 panel's structured od/id/thk/l dict was only ever consulted when `dimensions` was still empty,
 so a row with a partial/OD-only SIZE cell never picked up Thickness/Length from the panel at
 all - see app.providers.deterministic_provider._rows_to_components."""
-from app.providers.deterministic_provider import _rows_to_components
+from app.providers.deterministic_provider import _merge_detail_panels, _rows_to_components
 from app.services.bom_table_extractor import BomRow
 from app.services.drawing_detail_extractor import DetailPanel
 
@@ -73,3 +73,42 @@ def test_width_aliasing_does_not_apply_to_an_ordinary_cylindrical_component():
     )
     components = _rows_to_components([row], page_number=1, detail_panels=[panel])
     assert "width" not in components[0].dimensions
+
+
+def test_width_aliasing_does_not_apply_to_bellows():
+    # Unlike Shroud, Bellows's real width (340mm on the real WO 9374 indent) never appears
+    # anywhere in that drawing's own text - confirmed by direct search - so whatever plain
+    # number the magnitude-based Thk/L fallback guessed for Bellows's own panel "l" is some
+    # OTHER, unrelated callout (e.g. convolution pitch), not a genuine width. Aliasing it would
+    # feed the calc engine a wrong width instead of correctly reporting it as unobtainable.
+    row = BomRow(description="Bellows", qty="1", size="", confidence=0.8)
+    panel = DetailPanel(
+        label_text="BELLOW DETAIL", component_name="BELLOW",
+        dimensions={"od": "559", "thk": "20", "l": "20"}, needs_confirmation=True,
+    )
+    components = _rows_to_components([row], page_number=1, detail_panels=[panel])
+    assert "width" not in components[0].dimensions
+
+
+def test_merge_combines_raw_tokens_but_replaces_dimensions():
+    # Regression: PyMuPDF's own block-join can merge Bellows's real "1ply x 0.6 mm" ply-
+    # thickness callout with an adjacent, unrelated number into one unparseable token on the
+    # structural side (confirmed on the real WO 9374 drawing: "20" + "1ply x 0.6 mm" ->
+    # "201ply x 0.6 mm") - while the OCR-region pass happened to read that same callout as a
+    # separate, clean token. calc_engine_service.parse_bellows_ply_text needs that clean token
+    # (it scans a component's raw-token-built assumption_text for it), so raw_tokens must still
+    # be combined from both sources even though dimensions themselves are structural-only.
+    ocr_panel = DetailPanel(
+        label_text="BELLOW DETAIL", component_name="BELLOW",
+        dimensions={"od": "539"},  # a less-trusted OCR-pixel reading
+        raw_tokens=["1ply x 0.6 mm", "Ø 539"],
+    )
+    structural_panel = DetailPanel(
+        label_text="BELLOW  DETAIL", component_name="BELLOW",
+        dimensions={"od": "559", "l": "20"},  # the more-trusted structural reading
+        raw_tokens=["201ply x 0.6 mm", "Ø 559"],
+    )
+    merged = _merge_detail_panels([ocr_panel], [structural_panel])
+    assert len(merged) == 1
+    assert merged[0].dimensions == {"od": "559", "l": "20"}  # structural wins outright
+    assert "1ply x 0.6 mm" in merged[0].raw_tokens  # but the OCR side's clean token survives

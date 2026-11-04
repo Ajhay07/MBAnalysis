@@ -497,16 +497,30 @@ def _pdf_structural_detail_panels(pdf_path: str, page_number: int, known_descrip
 def _merge_detail_panels(ocr_panels: list, structural_panels: list) -> list:
     """Combines OCR-region-based and PDF-structural-text-based detail panels for the same page,
     keyed by component_name. When the structural pass found ANY panel for a component, its
-    dimensions REPLACE the OCR panel's entirely for that component (not a key-by-key merge) -
+    DIMENSIONS replace the OCR panel's entirely for that component (not a key-by-key merge) -
     confirmed necessary on a real drawing: Housing Flange's OCR panel had picked up a spurious
     "l" value (actually End Pipe's own L, bled in from a neighboring panel at OCR-pixel
     resolution) that a key-by-key merge would otherwise have let survive forever, since the
     structural pass correctly finds no "l" for Housing Flange at all (it has none) and so never
-    had a value to overwrite that stale one with. The OCR panel is kept only as a whole fallback
-    for a component the structural pass found no panel for at all."""
+    had a value to overwrite that stale one with.
+
+    RAW TOKENS, unlike dimensions, are still combined from both sources (deduplicated) - these
+    feed free-text parsing elsewhere (e.g. calc_engine_service.parse_bellows_ply_text scanning a
+    component's assumption_text for a "<N>ply x <X>mm" callout), and confirmed necessary on a
+    real drawing: PyMuPDF's own block-join had merged Bellows' real "1ply x 0.6 mm" callout with
+    an adjacent, unrelated "20" into one unparseable "201ply x 0.6 mm" token on the structural
+    side, while the OCR-region pass happened to read that same callout as a separate, clean
+    token - dropping the OCR side's raw tokens here would have silently lost that clean reading.
+
+    The OCR panel is used as a whole fallback (dimensions AND raw tokens) only for a component
+    the structural pass found no panel for at all."""
     structural_by_name = {p.component_name: p for p in structural_panels}
     by_name = {p.component_name: p for p in ocr_panels}
-    by_name.update(structural_by_name)
+    for name, sp in structural_by_name.items():
+        ocr_panel = by_name.get(name)
+        if ocr_panel is not None:
+            sp.raw_tokens = list(dict.fromkeys(ocr_panel.raw_tokens + sp.raw_tokens))
+        by_name[name] = sp
     return list(by_name.values())
 
 
@@ -646,17 +660,23 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
             if added_keys:
                 needs_dimension_confirmation = panel.needs_confirmation
 
-        # Bellows and Shroud are sheet-metal parts MB measures as Length x Width x Thickness
-        # (see the physical indent sheet), not OD/Thk/L like the cylindrical pipe/sleeve/flange
-        # components this same detail-panel extraction otherwise serves - but
-        # app.services.calc_engine_service's formula for these two specifically reads a
-        # "width" key, never "l" (its own flat-pattern length is calculated FROM "od", not read
-        # from this panel at all). Alias "l" to "width" here, for these two component types
-        # only, whenever a panel supplied an "l" from its own best-effort magnitude guess - so
-        # the calc engine actually sees a printed/reference width when one was found, instead of
-        # silently reporting width as unobtainable.
+        # Shroud is a sheet-metal part MB measures as Length x Width x Thickness (see the
+        # physical indent sheet), not OD/Thk/L like the cylindrical pipe/sleeve/flange
+        # components this same detail-panel extraction otherwise serves - and
+        # app.services.calc_engine_service's formula reads a "width" key, never "l" (Shroud's own
+        # flat-pattern length is calculated FROM "od", not read from a panel at all). Alias "l"
+        # to "width" here so the calc engine actually sees it, confirmed correct against the real
+        # WO 9374 drawing/indent sheet (panel l="170" = the real Shroud width).
+        #
+        # Bellows is NOT included here despite being the other sheet-metal/L-W-T type: unlike
+        # Shroud, its own real width (340mm on the indent) never appears ANYWHERE in this
+        # drawing's text at all - confirmed by direct search - so whatever plain number this
+        # panel's magnitude-based Thk/L fallback guessed for Bellows's own "l" is some OTHER,
+        # unrelated callout (e.g. convolution pitch), not a genuine width reading, and aliasing
+        # it would feed the calc engine a wrong value instead of correctly reporting width as
+        # unobtainable without a reviewer's manual pitch/depth/convolution-count input.
         spec = classify_component(description or "")
-        if spec is not None and spec.identifier in ("BELLOWS", "SHROUD") and "l" in dimensions:
+        if spec is not None and spec.identifier == "SHROUD" and "l" in dimensions:
             dimensions.setdefault("width", dimensions["l"])
 
         is_assumption = qty_value is None or needs_dimension_confirmation
