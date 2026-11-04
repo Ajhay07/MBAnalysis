@@ -95,6 +95,33 @@ def test_bellows_width_formula_only_runs_when_no_width_already_known(db, client)
     assert resp.json()["calc_result"]["dimension_detail"]["width"]["status"] == "REVIEW_REQUIRED"
 
 
+def test_bellows_width_number_of_convolutions_autofills_from_cad_callout(db, client):
+    # Regression: a reviewer who only knows pitch_mm/convolution_depth_mm (the two genuinely
+    # unextractable values) was still required to separately retype number_of_convolutions by
+    # hand, even though it's already right there on the drawing's own "5+5 NO. OF CONVOLUTES"
+    # callout - exactly the kind of manual-input friction parse_bellows_ply_text already solves
+    # for num_plies/ply_thickness_mm. Confirmed against the real WO 9374 drawing's own wording.
+    component = _bellows_component(
+        db, dimensions={"od": "559"},
+    )
+    component.assumption_text = (
+        "SIZE taken from drawing panel 'BELLOW  DETAIL' (raw tokens: Ø 559, 5+5 NO. OF "
+        "CONVOLUTES) - confirm before use."
+    )
+    db.add(component)
+    db.commit()
+    user = _editor(db)
+    token = create_access_token(user.id, user.role.value)
+
+    resp = client.patch(
+        f"/api/analyses/components/{component.id}",
+        json={"calc_inputs": {"pitch_mm": 20, "convolution_depth_mm": 6.3}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["calc_result"]["final_proposed_dimensions"]["width"] == 340.0
+
+
 def test_editing_a_sleeve_description_never_populates_calc_result(db, client):
     """Sleeve has no formula - editing it must never backfill calc_spec_identifier/calc_result,
     unlike Bellows/Shroud."""

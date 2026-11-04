@@ -140,6 +140,19 @@ def compute_bellows_or_shroud_result(component) -> dict | None:
             depth = parse_numeric(manual.get("convolution_depth_mm"))
             n = manual.get("number_of_convolutions")
             n = int(n) if isinstance(n, (int, float)) and n == int(n) else None
+            if n is None:
+                # Falls back to parsing a "<a>+<b> NO. OF CONVOLUTES" CAD callout the same way
+                # ply thickness does above - a reviewer only needs to type the two genuinely
+                # unextractable values (pitch_mm, convolution_depth_mm), not re-transcribe a
+                # count that's already right there on the drawing. Tried against BOTH texts
+                # (not `source_text or assumption_text`) since source_text is routinely just the
+                # bare description ("BELLOWS") - always present and never carrying the callout,
+                # which only ever shows up among a detail panel's own raw tokens in
+                # assumption_text.
+                for text in (component.source_text, component.assumption_text):
+                    n, _ = bellows_calculator.interpret_convolution_count(text)
+                    if n is not None:
+                        break
             results["width"] = bellows_calculator.calculate_sheet_width(pitch, depth, n)
     else:  # SHROUD
         base_length = shroud_calculator.calculate_base_circumference(od)
