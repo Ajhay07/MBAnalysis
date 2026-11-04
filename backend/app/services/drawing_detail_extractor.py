@@ -309,8 +309,11 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
     # not a decimal) - wall thickness is always much smaller than overall length for these
     # cylindrical components, confirmed on every real example seen (Sleeve Thk 1.5-9.5 vs L
     # 150-175; Mid/End Pipe Thk 10 vs L 125-150): the smallest remaining candidate under
-    # _THK_MAX_PLAUSIBLE_MM is Thk, the next remaining one is L. Always surfaced alongside its
-    # raw source token so a reviewer can see what it was guessed from, and the caller
+    # _THK_MAX_PLAUSIBLE_MM is Thk. L is the LARGEST remaining candidate, not merely the next-
+    # smallest - confirmed necessary on a real drawing (Shroud): a third, unrelated leftover
+    # number can land between Thk and the real L in sorted order, and "next-smallest" would pick
+    # that unrelated middle value over the real (larger) L. Always surfaced alongside its raw
+    # source token so a reviewer can see what it was guessed from, and the caller
     # (extract_detail_dimensions) always marks the whole panel needs_confirmation=True regardless
     # - this is pre-filling the edit box, never a substitute for checking it.
     leftover_plain = sorted(
@@ -321,7 +324,7 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
         dimensions["thk"] = leftover_plain[0][1]
         leftover_plain = leftover_plain[1:]
     if leftover_plain and "l" not in dimensions:
-        dimensions["l"] = leftover_plain[0][1]
+        dimensions["l"] = max(leftover_plain, key=lambda t: t[0])[1]
 
     avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
     return dimensions, raw_tokens, avg_conf
@@ -441,10 +444,12 @@ def extract_detail_dimensions_from_pdf_blocks(
         # border (e.g. "8 7 6 5 4") - PyMuPDF's own block-join sometimes concatenates a run of
         # these one-char-per-line rotated labels into what READS like a plain number (e.g. "65"
         # from lines "6" and "5"), which would otherwise be mistaken for a genuine Thk/L value.
-        # A real inline dimension value's block is always wide-and-short; one of these rotated
-        # grid markers is unmistakably tall-and-narrow (confirmed on the real WO 9374 drawing) -
-        # excluded by that shape alone, independent of its text content.
-        if (y1 - y0) > 2 * (x1 - x0):
+        # That join is the real tell: it only happens across MULTIPLE separate text lines within
+        # one block, which a genuine single-line dimension value never has - checking tall-vs-
+        # wide bbox shape alone (an earlier version of this check) wrongly excluded ordinary
+        # short single-digit values too (e.g. Shroud's own real Thk="2" block, naturally narrow
+        # for a one-character line), confirmed on the real WO 9374 drawing.
+        if len(block.get("lines", [])) > 1:
             continue
         cy = (y0 + y1) / 2.0
         cx = (x0 + x1) / 2.0

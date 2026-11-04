@@ -46,3 +46,30 @@ def test_no_detail_panel_match_leaves_bom_size_untouched():
     components = _rows_to_components([row], page_number=1, detail_panels=[])
     assert components[0].dimensions == {"size": "M8"}
     assert components[0].is_assumption is False
+
+
+def test_shroud_panel_l_is_aliased_to_width_for_the_calc_engine():
+    # app.services.calc_engine_service's Bellows/Shroud formula reads a "width" key, never "l" -
+    # Shroud's own flat-pattern length is CALCULATED from "od", not read from this panel at all,
+    # so a panel-sourced "l" (its own best-effort magnitude guess) needs aliasing to "width" or
+    # the calc engine would never see it and would report width as unobtainable even when the
+    # panel actually found one. Confirmed necessary on the real WO 9374 Shroud (panel l="170",
+    # the real Shroud width per the physical indent sheet).
+    row = BomRow(description="Shroud", qty="1", size="", confidence=0.8)
+    panel = DetailPanel(
+        label_text="SHROUD DETAIL", component_name="SHROUD",
+        dimensions={"od": "683", "thk": "2", "l": "170"}, needs_confirmation=True,
+    )
+    components = _rows_to_components([row], page_number=1, detail_panels=[panel])
+    assert components[0].dimensions["width"] == "170"
+    assert components[0].dimensions["l"] == "170"  # original key kept, not replaced
+
+
+def test_width_aliasing_does_not_apply_to_an_ordinary_cylindrical_component():
+    row = BomRow(description="Mid Pipe", qty="1", size="", confidence=0.8)
+    panel = DetailPanel(
+        label_text="MID PIPE DETAIL", component_name="MID PIPE",
+        dimensions={"od": "559", "thk": "10", "l": "150"}, needs_confirmation=True,
+    )
+    components = _rows_to_components([row], page_number=1, detail_panels=[panel])
+    assert "width" not in components[0].dimensions

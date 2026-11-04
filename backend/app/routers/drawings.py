@@ -17,6 +17,7 @@ from app.services.file_validation import (
     validate_content_matches_extension,
 )
 from app.services.paddle_ocr import run_page_ocr
+from app.services.calc_engine_service import refresh_bellows_shroud_calc_results
 from app.services.reference_bom_service import compute_discrepancy
 
 try:
@@ -273,8 +274,20 @@ def get_page_ocr_regions(drawing_id: str, page_number: int, db: Session = Depend
 @router.get("/{drawing_id}/analyses", response_model=list[AnalysisOut])
 def list_analyses(drawing_id: str, db: Session = Depends(get_db),
                    current_user: User = Depends(get_current_user)):
-    return db.query(Analysis).filter(Analysis.drawing_id == drawing_id).order_by(
+    analyses = db.query(Analysis).filter(Analysis.drawing_id == drawing_id).order_by(
         Analysis.version.desc()).all()
+    # The drawing detail page's Components tab is populated from THIS list endpoint, not the
+    # single-analysis GET (app.routers.analyses.get_analysis) - without refreshing here too, a
+    # Bellows/Shroud component's calc_result (its Length x Width x Thickness formula result)
+    # stayed empty until a reviewer separately edited it or generated an indent, so the Size
+    # field kept showing a plain OD/Thk/L reading instead, which doesn't match how MB actually
+    # describes those two component types (see the physical indent sheet).
+    # A list comprehension, not any(generator - ...), so every analysis's components get
+    # refreshed - any() would short-circuit and skip the rest the moment one analysis changes.
+    changed = any([refresh_bellows_shroud_calc_results(a.components) for a in analyses])
+    if changed:
+        db.commit()
+    return analyses
 
 
 @router.get("/{drawing_id}/analyses/{analysis_id}/reference-bom")

@@ -73,6 +73,24 @@ def test_get_analysis_is_idempotent_once_calc_result_is_current(db, client):
     assert r1.json()["components"][0]["calc_result"] == r2.json()["components"][0]["calc_result"]
 
 
+def test_list_analyses_for_drawing_also_fills_in_calc_result(db, client):
+    # Regression: the drawing detail page's Components tab is populated from THIS endpoint
+    # (GET /api/drawings/{id}/analyses), not the single-analysis GET above - the auto-calc-on-
+    # read refresh had only ever been wired to the latter, so simply opening a drawing still
+    # showed a plain OD/Thk/L reading for Bellows/Shroud instead of the calculated Length x
+    # Width x Thickness one, confirmed on the real WO 9374 drawing.
+    analysis = _bellows_analysis(db)
+    viewer = _viewer(db)
+    token = create_access_token(viewer.id, viewer.role.value)
+
+    resp = client.get(f"/api/drawings/{analysis.drawing_id}/analyses",
+                       headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    bellows = resp.json()[0]["components"][0]
+    assert bellows["calc_spec_identifier"] == "BELLOWS"
+    assert bellows["calc_result"]["final_proposed_dimensions"]["length"] == 1765
+
+
 def test_editing_quantity_marks_it_confirmed(db, client):
     analysis = _bellows_analysis(db)
     component_id = analysis.components[0].id

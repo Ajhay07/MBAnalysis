@@ -57,28 +57,42 @@ def test_reads_od_thk_l_for_one_panel(tmp_path):
     assert panels[0].dimensions == {"od": "559", "thk": "10", "l": "125"}
 
 
-def test_excludes_a_tall_narrow_block_that_reads_like_a_number(tmp_path):
+def test_excludes_a_multiline_block_that_reads_like_a_number(tmp_path):
     # A drawing's own vertical grid-reference markers along the page border can, after PyMuPDF's
-    # own block-join, read like a plain number ("65") while being unmistakably tall-and-narrow
-    # rather than a real inline dimension value's wide-and-short block shape. Built directly as
-    # a block dict (rather than via insert_text) since it's the one case that specifically needs
-    # an exact, deliberately-tall-and-narrow bbox to exercise the aspect-ratio exclusion.
+    # own block-join, read like a plain number ("65") - that join only happens when PyMuPDF has
+    # clustered multiple SEPARATE text lines ("6", then "5") into one block, which a genuine
+    # single-line dimension value never does. Built directly as a block dict (rather than via
+    # insert_text) since it's the one case that specifically needs more than one line to
+    # exercise the exclusion.
     blocks = _page_blocks(tmp_path, [
         ("END PIPE DETAIL", (30, 95)),
         ("10", (80, 70)),
     ], label_fontsize=40)
-    fake_tall_grid_marker_block = {
+    fake_multiline_grid_marker_block = {
         "bbox": (100.0, 60.0, 108.0, 112.0),
         "lines": [
             {"spans": [{"text": "6"}]},
             {"spans": [{"text": "5"}]},
         ],
     }
-    blocks.append(fake_tall_grid_marker_block)
+    blocks.append(fake_multiline_grid_marker_block)
     panels = extract_detail_dimensions_from_pdf_blocks(blocks)
     assert panels[0].dimensions.get("thk") == "10"
     assert "65" not in panels[0].raw_tokens
     assert "l" not in panels[0].dimensions
+
+
+def test_keeps_a_genuine_single_digit_value_despite_its_narrow_shape(tmp_path):
+    # Regression: an earlier version of the multiline exclusion above checked bbox aspect ratio
+    # (tall vs wide) instead of line count, which wrongly excluded a short, genuine SINGLE-LINE
+    # value too - any one-character value is naturally narrower than it is tall. Confirmed on
+    # the real WO 9374 drawing: Shroud's own real Thk="2" was being dropped this way.
+    blocks = _page_blocks(tmp_path, [
+        ("SHROUD DETAIL", (30, 95)),
+        ("2", (80, 70)),
+    ], label_fontsize=40)
+    panels = extract_detail_dimensions_from_pdf_blocks(blocks)
+    assert panels[0].dimensions.get("thk") == "2"
 
 
 def test_rejects_a_second_diameter_far_from_the_panels_other_values(tmp_path):
@@ -99,6 +113,22 @@ def test_rejects_a_second_diameter_far_from_the_panels_other_values(tmp_path):
     panels = extract_detail_dimensions_from_pdf_blocks(blocks)
     assert panels[0].dimensions.get("od") == "509"
     assert "id" not in panels[0].dimensions
+
+
+def test_picks_the_largest_leftover_as_l_not_merely_the_next_smallest(tmp_path):
+    # Reproduces the real WO 9374 Shroud case: three unlabeled leftover numbers (2, 15, 170) -
+    # the smallest (2) is the real Thk, but a THIRD, unrelated number (15) sits between it and
+    # the real L (170) in sorted order. Picking "next-smallest" after Thk would wrongly take 15
+    # as L instead of the real, larger 170.
+    blocks = _page_blocks(tmp_path, [
+        ("SHROUD DETAIL", (30, 150)),
+        ("2", (80, 70)),
+        ("15", (100, 100)),
+        ("170", (120, 130)),
+    ], label_fontsize=100)
+    panels = extract_detail_dimensions_from_pdf_blocks(blocks)
+    assert panels[0].dimensions.get("thk") == "2"
+    assert panels[0].dimensions.get("l") == "170"
 
 
 def test_returns_empty_list_with_no_blocks():

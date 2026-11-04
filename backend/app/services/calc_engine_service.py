@@ -172,6 +172,29 @@ def compute_bellows_or_shroud_result(component) -> dict | None:
     }
 
 
+def refresh_bellows_shroud_calc_results(components: list) -> bool:
+    """Keeps calc_result current for every Bellows/Shroud component in `components` without
+    needing a prior edit or indent generation first. Call this from every read path that
+    returns an analysis's components to the UI (not just a write path) - confirmed necessary:
+    this drawing family's Components tab is populated from the drawing's own analyses-LIST
+    endpoint (app.routers.drawings.list_analyses), which a reviewer hits just by opening a
+    drawing, never from the single-analysis GET this was originally wired to alone - so calling
+    it from only one of the two left calc_result empty (and the Bellows/Shroud "Size" field
+    showing a misleading OD/Thk/L reading instead of the correct Length x Width x Thickness one)
+    for any analysis the reviewer hadn't separately edited or generated an indent for yet. Cheap
+    (pure-Python formulas, no I/O) and a no-op for any component that isn't Bellows/Shroud or has
+    nothing computable yet. Returns whether anything changed, so the caller only commits when it
+    actually needs to."""
+    changed = False
+    for component in components:
+        calc_result = compute_bellows_or_shroud_result(component)
+        if calc_result is not None and calc_result != (component.calc_result or None):
+            component.calc_spec_identifier = calc_result["spec_identifier"]
+            component.calc_result = calc_result
+            changed = True
+    return changed
+
+
 def format_bellows_or_shroud_size_text(result: dict) -> str:
     """"1765 x 340 x 0.6"-style size text (Length x Width x Thickness, MB's own convention for
     these two component types - see the physical indent sheet) from a

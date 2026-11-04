@@ -8,27 +8,15 @@ from app.database import get_db
 from app.models.models import Analysis, Component, AuditLog, Bom, User
 from app.schemas.api import AnalysisOut, ComponentOut, ComponentUpdate, BomOut
 from app.services.bom_service import generate_bom_from_analysis
-from app.services.calc_engine_service import compute_bellows_or_shroud_result, run_component_calculation
+from app.services.calc_engine_service import (
+    compute_bellows_or_shroud_result,
+    refresh_bellows_shroud_calc_results,
+    run_component_calculation,
+)
 
 router = APIRouter(prefix="/api/analyses", tags=["analyses"])
 
 editor = require_role("admin", "engineer")
-
-
-def _refresh_bellows_shroud_calc_results(db: Session, components: list[Component]) -> bool:
-    """Keeps calc_result current for every Bellows/Shroud component without needing a prior
-    edit or indent generation - called on every analysis read, not just a write path, so simply
-    opening a drawing shows the calculation. Cheap (pure-Python formulas, no I/O) and a no-op
-    for any component that isn't Bellows/Shroud or has nothing computable yet. Returns whether
-    anything changed, so the caller only commits when it actually needs to."""
-    changed = False
-    for component in components:
-        calc_result = compute_bellows_or_shroud_result(component)
-        if calc_result is not None and calc_result != (component.calc_result or None):
-            component.calc_spec_identifier = calc_result["spec_identifier"]
-            component.calc_result = calc_result
-            changed = True
-    return changed
 
 
 @router.get("/{analysis_id}", response_model=AnalysisOut)
@@ -37,7 +25,7 @@ def get_analysis(analysis_id: str, db: Session = Depends(get_db),
     analysis = db.query(Analysis).get(analysis_id)
     if not analysis:
         raise HTTPException(404, "Analysis not found")
-    if _refresh_bellows_shroud_calc_results(db, analysis.components):
+    if refresh_bellows_shroud_calc_results(analysis.components):
         db.commit()
         db.refresh(analysis)
     return analysis

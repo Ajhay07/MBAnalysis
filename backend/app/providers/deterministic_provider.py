@@ -38,6 +38,8 @@ from app.services.drawing_detail_extractor import (
     match_panel_to_description,
 )
 from app.services.paddle_ocr import OcrRegion, run_page_ocr
+from engineering_engine.routing import component_builders  # noqa: F401 - populates REGISTRY on import
+from engineering_engine.routing.registry import classify_component
 
 # --- Title block field patterns -------------------------------------------------------------
 # Each pattern captures the value following a known label on the same line. Applied line-by-line
@@ -643,6 +645,19 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
                 dimensions.setdefault(key, value)
             if added_keys:
                 needs_dimension_confirmation = panel.needs_confirmation
+
+        # Bellows and Shroud are sheet-metal parts MB measures as Length x Width x Thickness
+        # (see the physical indent sheet), not OD/Thk/L like the cylindrical pipe/sleeve/flange
+        # components this same detail-panel extraction otherwise serves - but
+        # app.services.calc_engine_service's formula for these two specifically reads a
+        # "width" key, never "l" (its own flat-pattern length is calculated FROM "od", not read
+        # from this panel at all). Alias "l" to "width" here, for these two component types
+        # only, whenever a panel supplied an "l" from its own best-effort magnitude guess - so
+        # the calc engine actually sees a printed/reference width when one was found, instead of
+        # silently reporting width as unobtainable.
+        spec = classify_component(description or "")
+        if spec is not None and spec.identifier in ("BELLOWS", "SHROUD") and "l" in dimensions:
+            dimensions.setdefault("width", dimensions["l"])
 
         is_assumption = qty_value is None or needs_dimension_confirmation
         assumption_parts = []
