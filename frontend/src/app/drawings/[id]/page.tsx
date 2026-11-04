@@ -63,6 +63,17 @@ function displaySizeText(c: Component): string {
   return formatCalcSizeText(c.calc_result) || formatSizeText(c.dimensions);
 }
 
+// Every editable field on this page (Description, Size, Material, Qty, Calc Inputs) saves on
+// blur, not on Enter - there is no separate "save"/"calculate" button anywhere. Pressing Enter
+// in a plain, form-less <input> does nothing in a browser by default (no submit, no blur), so
+// without this a reviewer who types a value and presses Enter sees no save happen at all and no
+// indication why - confirmed as a real point of confusion, not just a missing nicety. Blurring
+// the field on Enter reuses the existing onBlur handler as the one save path, rather than
+// duplicating the save logic here.
+function blurOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key === "Enter") e.currentTarget.blur();
+}
+
 // Client-side mirror of engineering_engine.routing.registry's BELLOWS/SHROUD alias match - only
 // these two component types have a real manufacturing formula (see
 // app.services.calc_engine_service.compute_bellows_or_shroud_result), so only they get the
@@ -683,6 +694,7 @@ export default function DrawingViewerPage() {
                               type="text"
                               className="input !w-full !py-0.5 !px-1.5 !text-sm !font-normal"
                               defaultValue={c.description}
+                              onKeyDown={blurOnEnter}
                               onBlur={(e) => {
                                 const text = e.target.value.trim();
                                 if (text && text !== c.description) updateComponent(c, { description: text });
@@ -697,6 +709,7 @@ export default function DrawingViewerPage() {
                                 placeholder="not extracted - enter manually, e.g. OD 219  Thk 9.5"
                                 defaultValue={displaySizeText(c)}
                                 title={formatCalcSizeText(c.calc_result) ? "Length x Width x Thickness, from the Bellows/Shroud formula below - edit Calc: to change it." : undefined}
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
                                   if (text !== displaySizeText(c)) {
@@ -713,6 +726,7 @@ export default function DrawingViewerPage() {
                                 className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1"
                                 placeholder="material n/a"
                                 defaultValue={c.material}
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
                                   if (text !== c.material) updateComponent(c, { material: text });
@@ -728,6 +742,7 @@ export default function DrawingViewerPage() {
                                 className="input !w-20 !py-0.5 !px-1.5 !text-xs"
                                 defaultValue={c.quantity}
                                 title="Quantity per assembly - editing this confirms it (clears the 'quantity could not be read' flag on any indent generated from it)."
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const value = parseFloat(e.target.value);
                                   if (!Number.isNaN(value) && value !== c.quantity) updateComponent(c, { quantity: value });
@@ -757,6 +772,7 @@ export default function DrawingViewerPage() {
                                   className="input !w-auto !py-0.5 !px-1.5 !text-xs flex-1 font-mono"
                                   placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
                                   defaultValue={formatCalcInputsText(c.calc_inputs)}
+                                  onKeyDown={blurOnEnter}
                                   onBlur={(e) => {
                                     const text = e.target.value.trim();
                                     if (text !== formatCalcInputsText(c.calc_inputs)) {
@@ -859,6 +875,7 @@ export default function DrawingViewerPage() {
                                 type="text"
                                 className="input !w-36 !py-0.5 !px-1.5 !text-xs"
                                 defaultValue={c.description}
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
                                   if (text && text !== c.description) updateComponent(c, { description: text });
@@ -872,6 +889,7 @@ export default function DrawingViewerPage() {
                                 className="input !w-32 !py-0.5 !px-1.5 !text-xs"
                                 placeholder="material n/a"
                                 defaultValue={c.material}
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
                                   if (text !== c.material) updateComponent(c, { material: text });
@@ -886,6 +904,7 @@ export default function DrawingViewerPage() {
                                 placeholder="not extracted"
                                 defaultValue={displaySizeText(c)}
                                 title={formatCalcSizeText(c.calc_result) ? "Length x Width x Thickness, from the Bellows/Shroud formula - edit Calc: to change it." : undefined}
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const text = e.target.value.trim();
                                   if (text !== displaySizeText(c)) {
@@ -902,6 +921,7 @@ export default function DrawingViewerPage() {
                                 className="input !w-16 !py-0.5 !px-1.5 !text-xs text-right"
                                 defaultValue={c.quantity}
                                 title="Quantity per assembly - editing this confirms it."
+                                onKeyDown={blurOnEnter}
                                 onBlur={(e) => {
                                   const value = parseFloat(e.target.value);
                                   if (!Number.isNaN(value) && value !== c.quantity) updateComponent(c, { quantity: value });
@@ -937,6 +957,7 @@ export default function DrawingViewerPage() {
                                     placeholder="od=559 num_plies=1 ply_thickness_mm=0.6"
                                     defaultValue={formatCalcInputsText(c.calc_inputs)}
                                     title="Overrides for the Bellows/Shroud formula - editing recalculates automatically."
+                                    onKeyDown={blurOnEnter}
                                     onBlur={(e) => {
                                       const text = e.target.value.trim();
                                       if (text !== formatCalcInputsText(c.calc_inputs)) {
