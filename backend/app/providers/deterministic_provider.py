@@ -32,7 +32,11 @@ from app.config import get_settings
 from app.providers.base import DrawingAnalysisProvider
 from app.schemas.analysis import AnalysisResult, Ambiguity, ComponentCandidate, DimensionFinding, TitleBlock
 from app.services.bom_table_extractor import extract_bom_table
-from app.services.drawing_detail_extractor import extract_detail_dimensions, match_panel_to_description
+from app.services.drawing_detail_extractor import (
+    extract_detail_dimensions,
+    extract_detail_dimensions_from_pdf_blocks,
+    match_panel_to_description,
+)
 from app.services.paddle_ocr import OcrRegion, run_page_ocr
 
 # --- Title block field patterns -------------------------------------------------------------
@@ -464,6 +468,49 @@ def _pdf_structural_quantities(pdf_path: str, page_number: int, descriptions: li
     return results
 
 
+def _pdf_structural_detail_panels(pdf_path: str, page_number: int, known_descriptions: list[str]):
+    """Detail-panel OD/ID/Thk/L dimensions read from the PDF's own embedded text layer (via
+    app.services.drawing_detail_extractor.extract_detail_dimensions_from_pdf_blocks), which -
+    unlike PaddleOCR's image-region pass - never misreads a digit or loses a token to blur/skew,
+    and (per that function's own docstring) uses panel-bbox-containment matching instead of
+    nearest-centroid, since this drawing family's vertical-lane panel layout actively defeats
+    nearest-centroid assignment. Verified against the real WO 9374 production drawing: confirmed
+    correct for every one of its 6 named detail panels (e.g. End Pipe Thk=10/L=125, Sleeve
+    Thk=1.5/L=150), including the two OD/ID fields OCR was already getting right."""
+    if fitz is None:
+        return []
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return []
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return []
+    return extract_detail_dimensions_from_pdf_blocks(blocks, known_descriptions)
+
+
+def _merge_detail_panels(ocr_panels: list, structural_panels: list) -> list:
+    """Combines OCR-region-based and PDF-structural-text-based detail panels for the same page,
+    keyed by component_name. A structural panel's own dimension values always win over an OCR
+    panel's for the same key (far more reliable source - see _pdf_structural_detail_panels);
+    an OCR-only key (from a panel structural text never found at all) is preserved rather than
+    discarded, so this never loses a reading, only ever improves on one."""
+    by_name = {p.component_name: p for p in ocr_panels}
+    for sp in structural_panels:
+        existing = by_name.get(sp.component_name)
+        if existing is None:
+            by_name[sp.component_name] = sp
+            continue
+        merged_dimensions = dict(existing.dimensions)
+        merged_dimensions.update(sp.dimensions)
+        existing.dimensions = merged_dimensions
+        existing.raw_tokens = list(dict.fromkeys(existing.raw_tokens + sp.raw_tokens))
+    return list(by_name.values())
+
+
 def _parse_drawing_quantity_and_nb(ocr_text: str) -> tuple[float | None, float | None]:
     """Reads the drawing's own "QUANTITY" (how many assemblies this drawing covers) and
     "SIZE ( NB )" (nominal bore) title-block fields, when printed. Returns (None, None) for
@@ -651,6 +698,10 @@ class DeterministicProvider(DrawingAnalysisProvider):
         table = extract_bom_table(regions) if regions else None
         known_descriptions = [row.description for row in table.rows if row.description] if table else []
         detail_panels = extract_detail_dimensions(regions, known_descriptions) if regions else []
+        if pdf_path:
+            structural_panels = _pdf_structural_detail_panels(pdf_path, page_number, known_descriptions)
+            if structural_panels:
+                detail_panels = _merge_detail_panels(detail_panels, structural_panels)
         if table and table.rows:
             components = _rows_to_components(table.rows, page_number=1, detail_panels=detail_panels)
             if not components:

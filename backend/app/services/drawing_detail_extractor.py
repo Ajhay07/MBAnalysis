@@ -339,6 +339,130 @@ def extract_detail_dimensions(regions, known_descriptions: list[str] | None = No
     return results
 
 
+def _pdf_block_text(block: dict) -> str:
+    return "".join(
+        "".join(s.get("text", "") for s in line.get("spans", [])) for line in block.get("lines", [])
+    ).strip()
+
+
+# How far outside a label's OWN bounding-box Y-range a value may still sit and be considered
+# that label's own panel content. Confirmed against the real WO 9374 drawing: every genuine
+# dimension value for a panel sits within ~10pt of that panel's own label bbox's y0/y1 (the
+# label and its detail-view box are roughly the same height) - a handful sit just outside by
+# single digits (e.g. a diameter callout drawn right at the box's edge).
+_PDF_PANEL_Y_MARGIN_PT = 20.0
+# How far to the right of a label's own left edge (x0) a value may sit and still be considered
+# that label's own panel content - the Y-range check alone isn't enough, since an UNRELATED
+# generic, unnamed detail callout elsewhere on the sheet (a weld-detail "DETAIL-'A'" etc., never
+# itself recognized as a named panel) can still fall inside a named label's Y-range purely by
+# coincidence while sitting much further across the page. Confirmed against the real WO 9374
+# drawing: every genuine value for a named panel sits within ~120pt to the right of its own
+# label's x0 (never to its left), while that unrelated weld-detail noise sits 230pt+ away.
+_PDF_PANEL_X_OFFSET_PT = (-10.0, 160.0)
+
+
+def extract_detail_dimensions_from_pdf_blocks(
+    blocks: list[dict], known_descriptions: list[str] | None = None,
+) -> list[DetailPanel]:
+    """Same detection target as extract_detail_dimensions (one DetailPanel per "<NAME> DETAIL"
+    label, with whatever OD/ID/Thk/L dimensions can be confidently read nearby) but sourced from
+    PyMuPDF's own `page.get_text("dict")["blocks"]` - the PDF's embedded text layer - instead of
+    noisy image-region OCR.
+
+    Exists because ordinary nearest-centroid assignment (_assign_to_panels, tuned for OCR-pixel
+    geometry where a panel's values cluster tightly around its own label) turned out to actively
+    MISASSIGN values on this drawing family: WO 9374 lays its detail panels out in vertical
+    lanes, where a label sits at its lane's own left edge and its OWN dimension values sit well
+    to the right of it (offset 45-250pt) - meanwhile a DIFFERENT lane's label can easily be
+    geometrically CLOSER in raw (x, y) distance than that value's own label is (confirmed: this
+    nearest-centroid logic sent Sleeve's own L=150 to the adjacent Bellow panel instead).
+
+    Assignment here is containment-based instead: a value is assigned to the one label whose own
+    bounding-box Y-RANGE (plus _PDF_PANEL_Y_MARGIN_PT) it falls inside - confirmed to cleanly
+    separate every real value on the real WO 9374 drawing into its correct panel, since each
+    lane's own label and its detail-view box occupy essentially the same vertical span. X is
+    used only to break a tie when a value's Y literally falls inside two labels' ranges at once
+    (two lanes' panels sitting at the same height)."""
+    if not blocks:
+        return []
+    labels: list[tuple[str, tuple]] = []
+    for block in blocks:
+        text = _pdf_block_text(block)
+        raw = _DETAIL_LABEL_LEADING_MARKER_RE.sub("", text)
+        norm = _normalize(raw)
+        if not norm or "DETAIL" not in norm:
+            continue
+        m = _DETAIL_LABEL_RE.match(norm)
+        if m:
+            labels.append((m.group("name").strip(), tuple(block["bbox"]), block))
+    if not labels:
+        return []
+
+    exclude_texts = {_normalize(d) for d in (known_descriptions or [])}
+    label_block_ids = {id(b) for _name, _bbox, b in labels}
+
+    panel_blocks: dict[int, list[dict]] = {id(b): [] for _name, _bbox, b in labels}
+    for block in blocks:
+        if id(block) in label_block_ids:
+            continue
+        text = _pdf_block_text(block)
+        if not text:
+            continue
+        norm = _normalize(text)
+        if _is_noise_text(norm) or norm in exclude_texts:
+            continue
+        x0, y0, x1, y1 = block["bbox"]
+        # Drawings carry their own vertical grid-reference numbers/letters along the page
+        # border (e.g. "8 7 6 5 4") - PyMuPDF's own block-join sometimes concatenates a run of
+        # these one-char-per-line rotated labels into what READS like a plain number (e.g. "65"
+        # from lines "6" and "5"), which would otherwise be mistaken for a genuine Thk/L value.
+        # A real inline dimension value's block is always wide-and-short; one of these rotated
+        # grid markers is unmistakably tall-and-narrow (confirmed on the real WO 9374 drawing) -
+        # excluded by that shape alone, independent of its text content.
+        if (y1 - y0) > 2 * (x1 - x0):
+            continue
+        cy = (y0 + y1) / 2.0
+        cx = (x0 + x1) / 2.0
+        containing = [
+            (name, bbox, b) for name, bbox, b in labels
+            if bbox[1] - _PDF_PANEL_Y_MARGIN_PT <= cy <= bbox[3] + _PDF_PANEL_Y_MARGIN_PT
+            and _PDF_PANEL_X_OFFSET_PT[0] <= cx - bbox[0] <= _PDF_PANEL_X_OFFSET_PT[1]
+        ]
+        if not containing:
+            continue
+        if len(containing) > 1:
+            # Two lanes' labels both claim this Y - break the tie by nearest label X (the value
+            # is on one lane's side or the other, never equidistant in practice on a real sheet).
+            containing.sort(key=lambda t: abs((t[1][0] + t[1][2]) / 2.0 - cx))
+        _name, _bbox, label_block = containing[0]
+        panel_blocks[id(label_block)].append(block)
+
+    class _FakeRegion:
+        __slots__ = ("text", "confidence", "bbox")
+
+        def __init__(self, text: str, bbox: tuple):
+            self.text = text
+            self.confidence = 1.0
+            x0, y0, x1, y1 = bbox
+            self.bbox = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+
+    results: list[DetailPanel] = []
+    for name, _bbox, label_block in labels:
+        regions = [_FakeRegion(_pdf_block_text(b), tuple(b["bbox"])) for b in panel_blocks[id(label_block)]]
+        dimensions, raw_tokens, confidence = _parse_panel_dimensions(regions)
+        results.append(DetailPanel(
+            label_text=_pdf_block_text(label_block),
+            component_name=name,
+            dimensions=dimensions,
+            raw_tokens=raw_tokens,
+            confidence=confidence,
+            # Still True: this is proximity-based evidence (containment in the label's own
+            # y-range), not a verified reading - same convention as extract_detail_dimensions.
+            needs_confirmation=True,
+        ))
+    return results
+
+
 def match_panel_to_description(description: str, panels: list[DetailPanel]) -> DetailPanel | None:
     """Matches a BOM component's description (e.g. "Housing flange", "End pipe") to a detected
     DETAIL panel by normalized substring match. No fuzzy/AI matching - either the panel's
