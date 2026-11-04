@@ -138,6 +138,32 @@ def test_run_page_ocr_reports_original_error_when_retry_also_fails(monkeypatch):
     assert "could not execute a primitive" in result.error
 
 
+def test_run_page_ocr_drops_cached_engine_after_both_attempts_fail(monkeypatch):
+    """Reported in production: once ONE call into the cached engine singleton fails with a
+    oneDNN-style "could not execute a primitive" error, every later call on that SAME instance
+    failed identically - 10 consecutive re-analysis attempts each failed in well under a second,
+    far too fast to be a real OCR attempt, because _get_engine()'s own "construct once, reuse
+    forever" caching kept serving the same broken instance. After both the full-resolution
+    attempt and the downscaled retry fail, the cached engine must be dropped (set to None) so
+    the NEXT call rebuilds a fresh one instead of being poisoned forever by one bad call."""
+    class _AlwaysBoom:
+        def ocr(self, image, cls=True):
+            raise RuntimeError("could not execute a primitive descriptor")
+
+    broken_engine = _AlwaysBoom()
+    monkeypatch.setattr(paddle_ocr, "_engine", broken_engine)
+    monkeypatch.setattr(paddle_ocr, "_get_engine", lambda: paddle_ocr._engine)
+    image = np.ones((400, 200, 3), dtype=np.uint8) * 255
+
+    result = run_page_ocr(image, page_number=1)
+
+    assert result.configured is False
+    assert paddle_ocr._engine is None  # the broken singleton was dropped, not reused forever
+    # _engine_init_failed is deliberately untouched - a transient engine-call failure should
+    # not be conflated with PaddleOCR being genuinely unavailable (which still fails fast).
+    assert paddle_ocr._engine_init_failed is False
+
+
 def test_run_page_ocr_malformed_image_does_not_crash(monkeypatch):
     _mock_engine(monkeypatch, [[]])
     result = run_page_ocr(np.array([]), page_number=1)

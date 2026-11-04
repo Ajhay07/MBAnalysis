@@ -263,6 +263,24 @@ def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResul
             with _ocr_call_lock:
                 raw = engine.ocr(downscaled, cls=False)
         except Exception:
+            # Reported in production: once a call into this engine instance fails with a
+            # oneDNN-style "could not execute a primitive" error, EVERY subsequent call on that
+            # SAME long-lived singleton fails identically from then on (confirmed: 10 consecutive
+            # re-analysis attempts each failed in well under a second - too fast to be a real OCR
+            # attempt at all) - this engine's internal primitive cache has gotten corrupted, and
+            # _get_engine()'s own "construct once, reuse forever" caching keeps serving that same
+            # broken instance for the rest of this process's life. Dropping the cached engine
+            # here forces the NEXT call to build a fresh one instead of being poisoned forever by
+            # one bad call; _engine_init_failed is deliberately left alone, since a genuinely
+            # unavailable PaddleOCR should still fail fast rather than retrying construction on
+            # every single request.
+            global _engine
+            _engine = None
+            logger.error(
+                "PaddleOCR engine call failed on page %s even after a downscaled retry (%s) - "
+                "dropping the cached engine instance so the next OCR call rebuilds a fresh one "
+                "instead of reusing a possibly-corrupted one.", page_number, exc,
+            )
             return PageOcrResult(page_number=page_number, configured=False, error=str(exc))
 
     regions: list[OcrRegion] = []
