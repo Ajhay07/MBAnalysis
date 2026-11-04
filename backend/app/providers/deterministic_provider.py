@@ -393,6 +393,77 @@ def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple
     return results
 
 
+def _pdf_structural_quantities(pdf_path: str, page_number: int, descriptions: list[str]) -> dict[str, float]:
+    """{description: quantity} for a transposed-layout BOM table's QTY row, using the SAME
+    PyMuPDF block-clustering source as _pdf_structural_materials (find this item's own
+    description block by text match, then the nearest QTY-row block by x-position). Exists
+    specifically for a component _pdf_structural_missing_items recovered - one PaddleOCR's
+    image-region pass never detected at all, so there was never a region to read its quantity
+    digit from in the normal OCR-region pipeline (app.services.bom_table_extractor) either, even
+    after that pipeline's own embedded-text QTY supplement (which only fills gaps for items OCR
+    DID find a region for). Confirmed on the real WO 9374 drawing: the QTY row's own digit
+    blocks (e.g. "8" for M8 Bolt & Nut) are read correctly from embedded text the same way
+    MATERIAL's are. Returns {} (never raises) if the PDF has no DESCRIPTION/QTY labels in this
+    layout, or on any PyMuPDF error."""
+    if fitz is None or not descriptions:
+        return {}
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return {}
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return {}
+
+    def norm(s: str) -> str:
+        return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+    desc_label = next((b for b in blocks if _pdf_block_text(b).strip().upper() == "DESCRIPTION"), None)
+    if desc_label is None:
+        return {}
+    desc_x0 = desc_label["bbox"][0]
+    qty_label_candidates = [b for b in blocks if b is not desc_label and "QTY" in _pdf_block_text(b).upper()]
+    if not qty_label_candidates:
+        return {}
+    qty_label = min(qty_label_candidates, key=lambda b: abs(b["bbox"][0] - desc_x0))
+    qty_y0 = qty_label["bbox"][1]
+    qty_row_candidates = [
+        b for b in blocks
+        if b is not qty_label
+        and qty_y0 - 10 <= b["bbox"][1] <= qty_y0 + 150
+        and b["bbox"][0] < 300
+        and re.fullmatch(r"\d+(\.\d+)?", _pdf_block_text(b))
+    ]
+    if not qty_row_candidates:
+        return {}
+
+    results: dict[str, float] = {}
+    for description in descriptions:
+        nd = norm(description)
+        if not nd:
+            continue
+        candidates = [
+            b for b in blocks
+            if len(norm(_pdf_block_text(b))) >= max(3, len(nd) * 0.6)
+            and (nd in norm(_pdf_block_text(b)) or norm(_pdf_block_text(b)) in nd)
+        ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda b: abs(len(norm(_pdf_block_text(b))) - len(nd)))
+        item_x0 = candidates[0]["bbox"][0]
+        best = min(qty_row_candidates, key=lambda b: abs(b["bbox"][0] - item_x0), default=None)
+        if best is not None:
+            try:
+                results[description] = float(_pdf_block_text(best))
+            except ValueError:
+                pass
+    return results
+
+
 def _parse_drawing_quantity_and_nb(ocr_text: str) -> tuple[float | None, float | None]:
     """Reads the drawing's own "QUANTITY" (how many assemblies this drawing covers) and
     "SIZE ( NB )" (nominal bore) title-block fields, when printed. Returns (None, None) for
@@ -625,30 +696,54 @@ class DeterministicProvider(DrawingAnalysisProvider):
                 missing_items = _pdf_structural_missing_items(
                     pdf_path, page_number, [c.description for c in components]
                 )
+                missing_quantities = _pdf_structural_quantities(pdf_path, page_number, missing_items)
                 for missing_description in missing_items:
                     missing_material = _pdf_structural_materials(
                         pdf_path, page_number, [(missing_description, "")]
                     ).get(missing_description, "")
-                    components.append(ComponentCandidate(
-                        description=missing_description,
-                        material=missing_material,
-                        quantity=1,
-                        make_buy="Review",
-                        confidence=0.5,
-                        verification_status="Unverified",
-                        source_page=page_number,
-                        source_text=missing_description,
-                        quantity_basis="assumed",
-                        component_type="purchased",
-                        is_assumption=True,
-                        assumption_text=(
-                            "This row was never detected by image OCR at all (confirmed: no "
-                            "text region anywhere in its column) - recovered from the PDF's own "
-                            "embedded text layer instead of being silently dropped. Quantity "
-                            "could not be read from anywhere and defaults to 1 - confirm the "
-                            "real quantity before this is used."
-                        ),
-                    ))
+                    real_quantity = missing_quantities.get(missing_description)
+                    if real_quantity is not None:
+                        components.append(ComponentCandidate(
+                            description=missing_description,
+                            material=missing_material,
+                            quantity=real_quantity,
+                            make_buy="Review",
+                            confidence=0.5,
+                            verification_status="Unverified",
+                            source_page=page_number,
+                            source_text=missing_description,
+                            quantity_basis="structural_pdf_text",
+                            component_type="purchased",
+                            is_assumption=True,
+                            assumption_text=(
+                                "This row was never detected by image OCR at all (confirmed: no "
+                                "text region anywhere in its column) - recovered from the PDF's "
+                                "own embedded text layer instead of being silently dropped, "
+                                "including its quantity from the same QTY row. Confirm it is "
+                                "correct before this is used."
+                            ),
+                        ))
+                    else:
+                        components.append(ComponentCandidate(
+                            description=missing_description,
+                            material=missing_material,
+                            quantity=1,
+                            make_buy="Review",
+                            confidence=0.5,
+                            verification_status="Unverified",
+                            source_page=page_number,
+                            source_text=missing_description,
+                            quantity_basis="assumed",
+                            component_type="purchased",
+                            is_assumption=True,
+                            assumption_text=(
+                                "This row was never detected by image OCR at all (confirmed: no "
+                                "text region anywhere in its column) - recovered from the PDF's own "
+                                "embedded text layer instead of being silently dropped. Quantity "
+                                "could not be read from anywhere and defaults to 1 - confirm the "
+                                "real quantity before this is used."
+                            ),
+                        ))
         else:
             ambiguities.append(Ambiguity(
                 description=(
