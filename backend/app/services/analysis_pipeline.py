@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 import numpy as np
@@ -30,6 +31,9 @@ from app.services.classification import classify_component
 from app.services.paddle_ocr import run_page_ocr
 from app.services.bom_candidate_service import build_candidate_bom
 from app.services.reference_bom_service import detect_reference_bom_table
+
+logger = logging.getLogger("app.services.analysis_pipeline")
+
 
 def _pdf_raster_zoom() -> float:
     """PyMuPDF's default is 72 DPI (zoom 1.0). Settings.PDF_RENDER_DPI (default 200) is what
@@ -104,7 +108,25 @@ def rasterize_pdf_pages(path: str, drawing: Drawing) -> list[tuple[int, np.ndarr
                 pix.save(preview_path)
                 if cv2 is not None:
                     image_bgr = _bgr_from_pixmap(pix)
+                elif image_bgr is None:
+                    logger.warning(
+                        "Page %s of drawing %s rasterized to a pixmap fine, but cv2 is not "
+                        "available on this server - OCR (and therefore component extraction) "
+                        "will be skipped for this page.", page_number, drawing.id,
+                    )
             except Exception:
+                # Confirmed a real production failure mode, not theoretical: this used to swallow
+                # the actual exception with no logging at all, leaving a page with a full BOM
+                # table visible in its embedded_text but 0 OCR regions and 0 extracted
+                # components, with nothing in the logs to say why - see analysis_pipeline's own
+                # deterministic_provider.analyze() docstring for the downstream symptom this
+                # causes. Logged at exception level (full traceback) specifically so a recurrence
+                # is diagnosable from Railway's own logs instead of requiring guesswork.
+                logger.exception(
+                    "Failed to rasterize page %s of drawing %s (matrix zoom=%s) - OCR will be "
+                    "skipped for this page; only its embedded PDF text will be available.",
+                    page_number, drawing.id, zoom,
+                )
                 image_bgr = None
 
             pages.append((page_number, image_bgr, embedded_text))
