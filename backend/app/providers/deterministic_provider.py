@@ -166,6 +166,52 @@ def _pdf_block_text(block: dict) -> str:
 _DESCRIPTION_FUZZY_MATCH_THRESHOLD = 0.8
 
 
+def _pdf_item_row_texts(pdf_path: str, page_number: int) -> list[str]:
+    """Every item-row block's own text for a transposed-layout BOM table - the DESCRIPTION
+    column's full set of entries, straight from PyMuPDF's block clustering over the PDF's
+    embedded text layer. Shared by _pdf_structural_item_descriptions (fixing a misread name) and
+    _pdf_structural_missing_items (recovering a name PaddleOCR's image-region pass never
+    detected as a region AT ALL - confirmed on a real drawing: "M8 Bolt & Nut" has zero OCR
+    regions anywhere in its column, not a misread, a true miss). Returns [] (never raises) on
+    any error or missing table structure."""
+    if fitz is None:
+        return []
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return []
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return []
+
+    desc_label = next((b for b in blocks if _pdf_block_text(b).strip().upper() == "DESCRIPTION"), None)
+    if desc_label is None:
+        return []
+    dx0, dy0, dx1, dy1 = desc_label["bbox"]
+    # x bound of 150 (not a looser guess) - confirmed against the real drawing's own item
+    # column span (~152 to ~250 points past the DESCRIPTION label's own x1) while safely
+    # excluding the unrelated spec-parameters column (confirmed starting ~330+), which a wider
+    # bound previously let bleed in as bogus "items" ("Total Assembly Weight...", "CYCLE
+    # LIFE..."). The length cap is a second, independent guard against the same class of
+    # mistake - a real item name on this drawing is never anywhere near this long.
+    item_row_texts = []
+    for b in blocks:
+        if b is desc_label:
+            continue
+        t = _pdf_block_text(b)
+        if not t or len(t) > 40:
+            continue
+        x0, y0, x1, y1 = b["bbox"]
+        y_overlap = min(y1, dy1) - max(y0, dy0)
+        if y_overlap > 0 and x0 > dx1 and x0 < dx1 + 150:
+            item_row_texts.append(t)
+    return item_row_texts
+
+
 def _pdf_structural_item_descriptions(pdf_path: str, page_number: int, ocr_descriptions: list[str]) -> dict[str, str]:
     """{ocr_description: corrected_description} for a transposed-layout BOM table's item names,
     using the SAME PyMuPDF block-clustering source as _pdf_structural_materials. The OCR-region
@@ -184,35 +230,9 @@ def _pdf_structural_item_descriptions(pdf_path: str, page_number: int, ocr_descr
     match is included too (so the caller can apply this uniformly without a separate
     equality check) - never a low-confidence guess. Returns {} (never raises) on any error or
     missing table structure."""
-    if fitz is None or not ocr_descriptions:
+    if not ocr_descriptions:
         return {}
-    try:
-        doc = fitz.open(pdf_path)
-        page = doc[page_number - 1]
-        page_dict = page.get_text("dict")
-        doc.close()
-    except Exception:
-        return {}
-
-    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
-    if not blocks:
-        return {}
-
-    desc_label = next((b for b in blocks if _pdf_block_text(b).strip().upper() == "DESCRIPTION"), None)
-    if desc_label is None:
-        return {}
-    dx0, dy0, dx1, dy1 = desc_label["bbox"]
-    item_row_texts = []
-    for b in blocks:
-        if b is desc_label:
-            continue
-        t = _pdf_block_text(b)
-        if not t:
-            continue
-        x0, y0, x1, y1 = b["bbox"]
-        y_overlap = min(y1, dy1) - max(y0, dy0)
-        if y_overlap > 0 and x0 > dx1 and x0 < dx1 + 250:
-            item_row_texts.append(t)
+    item_row_texts = _pdf_item_row_texts(pdf_path, page_number)
     if not item_row_texts:
         return {}
 
@@ -233,6 +253,37 @@ def _pdf_structural_item_descriptions(pdf_path: str, page_number: int, ocr_descr
             cleaned = re.sub(r"(?<=[A-Za-z])\d$", "", best).strip()
             results[description] = cleaned or best
     return results
+
+
+def _pdf_structural_missing_items(pdf_path: str, page_number: int, known_descriptions: list[str]) -> list[str]:
+    """Item-row names present in the PDF's own embedded-text blocks (see _pdf_item_row_texts)
+    that have NO confident match (fuzzy ratio >= _DESCRIPTION_FUZZY_MATCH_THRESHOLD) against any
+    already-known (OCR-derived, possibly-corrected) description - i.e. an item PaddleOCR's
+    image-region pass missed ENTIRELY, not just misread. Returns [] (never raises) on any error,
+    missing table structure, or when every PDF item already has a match."""
+    item_row_texts = _pdf_item_row_texts(pdf_path, page_number)
+    if not item_row_texts:
+        return []
+    known_upper = [k.upper() for k in known_descriptions if k]
+    missing = []
+    for text in item_row_texts:
+        text_upper = text.upper()
+        # A known description appearing literally INSIDE this block's text means it's a merged
+        # description+material(+qty) block for an item already accounted for (the same
+        # clustering artifact _pdf_structural_materials' "COLLAR4" case comes from) - not a
+        # genuinely different, missing item. Checked before the fuzzy ratio since a long merged
+        # block's low ratio against the short bare description it contains would otherwise look
+        # like no match at all.
+        if any(known in text_upper for known in known_upper if len(known) >= 4):
+            continue
+        best_ratio = max(
+            (difflib.SequenceMatcher(None, text_upper, known).ratio() for known in known_upper),
+            default=0.0,
+        )
+        if best_ratio < _DESCRIPTION_FUZZY_MATCH_THRESHOLD:
+            cleaned = re.sub(r"(?<=[A-Za-z])\d$", "", text).strip()
+            missing.append(cleaned or text)
+    return missing
 
 
 def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple[str, str]]) -> dict[str, str]:
@@ -562,6 +613,42 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     better = better_materials.get(c.description)
                     if better:
                         c.material = better
+
+                # An item PaddleOCR's image-region pass never detected AT ALL (not a misread -
+                # confirmed on a real drawing: zero OCR regions anywhere in "M8 Bolt & Nut"'s own
+                # column) would otherwise be silently absent from the BOM entirely, with no sign
+                # anything was missing. Synthesized from the PDF's own embedded text instead of
+                # being dropped - quantity is genuinely unknown for a row OCR never saw at all
+                # (no region to read a QTY digit from), so it's explicitly flagged rather than
+                # guessed, same "never fabricate, always flag" convention as every other
+                # assumption this pipeline makes.
+                missing_items = _pdf_structural_missing_items(
+                    pdf_path, page_number, [c.description for c in components]
+                )
+                for missing_description in missing_items:
+                    missing_material = _pdf_structural_materials(
+                        pdf_path, page_number, [(missing_description, "")]
+                    ).get(missing_description, "")
+                    components.append(ComponentCandidate(
+                        description=missing_description,
+                        material=missing_material,
+                        quantity=1,
+                        make_buy="Review",
+                        confidence=0.5,
+                        verification_status="Unverified",
+                        source_page=page_number,
+                        source_text=missing_description,
+                        quantity_basis="assumed",
+                        component_type="purchased",
+                        is_assumption=True,
+                        assumption_text=(
+                            "This row was never detected by image OCR at all (confirmed: no "
+                            "text region anywhere in its column) - recovered from the PDF's own "
+                            "embedded text layer instead of being silently dropped. Quantity "
+                            "could not be read from anywhere and defaults to 1 - confirm the "
+                            "real quantity before this is used."
+                        ),
+                    ))
         else:
             ambiguities.append(Ambiguity(
                 description=(
