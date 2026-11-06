@@ -19,6 +19,7 @@ from app.services.file_validation import (
 from app.services.paddle_ocr import run_page_ocr
 from app.services.calc_engine_service import refresh_bellows_shroud_calc_results
 from app.services.reference_bom_service import compute_discrepancy
+from app.services.supabase_storage import upload_drawing_file
 
 try:
     import cv2
@@ -51,6 +52,10 @@ async def upload_drawing(
 
     with open(abs_path, "wb") as f:
         f.write(contents)
+    # Best-effort - a silent no-op unless Supabase is configured (see
+    # app.services.supabase_storage's own docstring). Never raises, so this can't fail the
+    # upload itself even if Supabase is unreachable.
+    upload_drawing_file(abs_path, stored_name)
 
     drawing = Drawing(
         drawing_number=drawing_number,

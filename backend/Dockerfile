@@ -1,4 +1,7 @@
-# Backend container for Railway deployment.
+# Backend container. Originally written for Railway; also used for Hugging Face Spaces (see
+# README.hf-spaces.md at the repo root for Spaces-specific setup) - Spaces runs this same image,
+# just with its own PORT/DATABASE_URL/UPLOAD_DIR values and, unlike Railway, enforces that the
+# container run as a non-root UID (added below) rather than root.
 # Mirrors the documented safe install order in requirements.txt / README
 # ("OCR vs. AI Vision Interpretation"): paddleocr must be installed with
 # --no-deps, otherwise its own install_requires drags in a conflicting
@@ -68,10 +71,20 @@ COPY . .
 
 # Writable cache/data dirs. PaddleOCR downloads model weights to $HOME/.paddleocr (it has no
 # dedicated cache-dir env var), so in production HOME, DATABASE_URL and UPLOAD_DIR are all
-# pointed at the mounted Railway volume via env vars set on the Railway service (see
-# DEPLOYMENT.md) - these defaults just ensure the container has somewhere writable without one.
+# pointed at a mounted persistent volume via env vars set on the hosting platform (Railway's own
+# volume, or a Hugging Face Spaces persistent-storage mount - see README.hf-spaces.md) - these
+# defaults just ensure the container has somewhere writable without one (on a platform with NO
+# persistent volume at all, e.g. a free HF Space, this also means that directory's contents -
+# the SQLite DB and uploaded drawings - do not survive a restart/redeploy; this is a platform
+# storage limitation, not a bug here).
 ENV HOME=/app
 RUN mkdir -p /app/.paddleocr /app/uploads
+
+# Hugging Face Spaces runs Docker containers as a non-root user and will refuse to start one
+# that tries to run as root - Railway has no such requirement, so this is a no-op there (it
+# simply also runs as this same non-root user, which is fine since nothing here needs root).
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
 RUN chmod +x docker-entrypoint.sh
 

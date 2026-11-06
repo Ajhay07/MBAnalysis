@@ -31,6 +31,7 @@ from app.services.classification import classify_component
 from app.services.paddle_ocr import run_page_ocr
 from app.services.bom_candidate_service import build_candidate_bom
 from app.services.reference_bom_service import detect_reference_bom_table
+from app.services.supabase_storage import download_drawing_file
 
 logger = logging.getLogger("app.services.analysis_pipeline")
 
@@ -49,7 +50,14 @@ class PdfProcessingError(Exception):
 
 def drawing_abspath(drawing: Drawing) -> str:
     settings = get_settings()
-    return os.path.abspath(os.path.join(settings.UPLOAD_DIR, drawing.stored_file_name))
+    path = os.path.abspath(os.path.join(settings.UPLOAD_DIR, drawing.stored_file_name))
+    # On a platform with no persistent local disk (see app.services.supabase_storage), a fresh
+    # container has the Drawing row (Supabase Postgres) but an empty local filesystem - fetch
+    # the original file back down from Supabase Storage before any caller tries to read it. A
+    # no-op (download_drawing_file returns immediately) whenever the file is already present
+    # locally or Supabase isn't configured, so this costs nothing on Railway/local dev.
+    download_drawing_file(drawing.stored_file_name, path)
+    return path
 
 
 def page_preview_path(drawing: Drawing, page_number: int) -> str:

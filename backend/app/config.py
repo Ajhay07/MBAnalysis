@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = ".pdf,.png,.jpg,.jpeg,.tif,.tiff"
     ENVIRONMENT: str = "development"
     UPLOAD_DIR: str = "./uploads"
+    # Optional - see app.services.supabase_storage. Only needed on a hosting platform with no
+    # persistent local disk (e.g. a free Hugging Face Space); leave unset on Railway/local dev,
+    # where the app behaves exactly as it always has (local disk only, no Supabase calls at all).
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_STORAGE_BUCKET: str = "drawings"
     # Comma separated list of origins allowed to call the API (CORS). Defaults to the local
     # Next.js dev server; set to the deployed frontend's origin(s) in production via env var.
     ALLOWED_ORIGINS: str = "http://localhost:3000"
