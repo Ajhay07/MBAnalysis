@@ -139,7 +139,7 @@ def _get_engine():
     settings = get_settings()
     try:
         _engine = PaddleOCR(
-            use_angle_cls=True,
+            use_angle_cls=settings.OCR_USE_ANGLE_CLS,
             lang=settings.OCR_LANGUAGE,
             use_gpu=settings.OCR_USE_GPU,
             show_log=False,

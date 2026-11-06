@@ -44,7 +44,15 @@ class Settings(BaseSettings):
     OCR_USE_GPU: bool = False
     # DPI used when rasterizing PDF pages for OCR/preview. 200 is well above what's needed for
     # text legibility on engineering drawings while keeping page images/processing time small.
+    # Lower this (e.g. 150) on a memory-constrained host (a free Render instance's 512MB has been
+    # observed OOM-killing mid-analysis - PDF page image size scales with DPI squared, so this is
+    # one of the few real memory levers available without changing what PaddleOCR itself loads).
     PDF_RENDER_DPI: int = 200
+    # PaddleOCR's angle-classification model adds its own memory footprint for a feature this
+    # app doesn't rely on (OCR_PREPROCESS_DESKEW already defaults off - these drawings aren't
+    # expected to arrive rotated). Disable on a memory-constrained host to shave some RAM; True
+    # (PaddleOCR's own default) elsewhere costs nothing extra worth avoiding.
+    OCR_USE_ANGLE_CLS: bool = True
     OCR_CONFIDENCE_THRESHOLD: float = 0.5
     # Deskew defaults off: the minAreaRect-based angle estimate is unreliable on sparse/
     # high-aspect-ratio text layouts (verified empirically - it can rotate otherwise-straight
