@@ -125,16 +125,32 @@ class PageOcrResult:
 
 _engine = None
 _engine_init_failed = False
+# The actual exception from the last failed construction attempt, if any - surfaced in
+# run_page_ocr's "not installed/available" error message below, since that generic message was
+# confirmed misleading in production: PaddleOCR WAS installed (the Docker build's own self-check
+# constructs an engine successfully), but runtime construction still failed for a real, distinct
+# reason (e.g. the container's actual memory limit, tighter than what's available during the
+# build step) that was previously invisible outside server-side logs this app has no access to
+# read. Reset to None on a successful construction, so a stale old error never lingers.
+_engine_init_error: str | None = None
 
 
 def _get_engine():
-    """Module-level singleton. Constructed once on first real use and reused forever after -
-    never per-page/per-request (model load alone takes several seconds)."""
-    global _engine, _engine_init_failed
+    """Module-level singleton, but NOT a permanent one on a construction failure (only on
+    PaddleOCR genuinely being unimportable - see below): confirmed in production that a
+    construction failure can be transient (e.g. a momentary memory-pressure spike from other
+    in-flight requests) rather than a permanent "this will never work" condition, so permanently
+    latching it the same way a real missing-dependency case does would wrongly keep OCR broken
+    for the rest of the process's life after one bad moment. Each call to this function after a
+    construction failure retries - construction itself is fast once model weights are already on
+    disk (baked into the Docker image - see Dockerfile), so this cost is small even if it keeps
+    failing."""
+    global _engine, _engine_init_failed, _engine_init_error
     if _engine is not None or _engine_init_failed:
         return _engine
     if PaddleOCR is None:
-        _engine_init_failed = True
+        _engine_init_failed = True  # genuinely permanent: the module itself isn't installed
+        _engine_init_error = "paddleocr/paddlepaddle module not importable"
         return None
     settings = get_settings()
     try:
@@ -144,12 +160,13 @@ def _get_engine():
             use_gpu=settings.OCR_USE_GPU,
             show_log=False,
         )
+        _engine_init_error = None
     except Exception as exc:
-        _engine_init_failed = True
         _engine = None
+        _engine_init_error = f"{type(exc).__name__}: {exc}"
         logger.error(
             "PaddleOCR engine construction failed (module imported fine, but instantiating "
-            "it - which downloads/loads model weights - did not): %s\n%s",
+            "it did not): %s\n%s",
             exc, traceback.format_exc(),
         )
     return _engine
@@ -233,12 +250,14 @@ def run_page_ocr(image: np.ndarray | None, page_number: int = 1) -> PageOcrResul
 
     engine = _get_engine()
     if engine is None:
+        detail = f" Detail: {_engine_init_error}" if _engine_init_error else ""
         return PageOcrResult(
             page_number=page_number,
             configured=False,
             error=(
                 "PaddleOCR is not installed/available on this server. Install paddleocr + "
                 "paddlepaddle (see README). AI vision analysis and demo mode still work."
+                + detail
             ),
         )
 
