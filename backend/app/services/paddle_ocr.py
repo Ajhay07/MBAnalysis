@@ -67,21 +67,29 @@ try:
 except Exception:  # pragma: no cover
     cv2 = None
 
-try:
-    from paddleocr import PaddleOCR
-except Exception as exc:  # pragma: no cover - optional dependency may not be installed
-    PaddleOCR = None
-    # This used to be swallowed completely with no log line at all, which is exactly why a
-    # real "PaddleOCR not installed" report in production (the deterministic provider's only
-    # OCR source) had no accompanying stack trace anywhere - `railway logs` showed nothing
-    # pointing at paddleocr, even though every page OCR call was silently failing. Logging the
-    # real import exception here means it now shows up in server logs at startup, not just as
-    # a generic per-request error string.
-    logger.error(
-        "PaddleOCR import failed at startup - OCR (and therefore all real BOM-table "
-        "extraction) will be unavailable until this is fixed: %s\n%s",
-        exc, traceback.format_exc(),
-    )
+def _import_paddleocr():
+    """A fresh, RETRIABLE import attempt each time this is called - deliberately NOT a one-shot
+    top-level `import` statement (what this used to be). Confirmed in production (Render): the
+    very first import attempt, made at app startup under startup-time resource contention
+    (migrations running, uvicorn starting, other imports in flight), failed and set a
+    module-level PaddleOCR = None that then NEVER got retried for the rest of that process's
+    life - even though a separate, later `from paddleocr import PaddleOCR` elsewhere in the app
+    (app.main's own health-check import) succeeded fine once that contention had passed,
+    confirming the package itself was never actually broken, just that one unlucky first
+    attempt. Returns the PaddleOCR class, or None (logging the real exception) on failure."""
+    try:
+        from paddleocr import PaddleOCR as _PaddleOCR
+        return _PaddleOCR
+    except Exception as exc:  # pragma: no cover - optional dependency may not be installed
+        logger.error(
+            "PaddleOCR import attempt failed - OCR (and therefore all real BOM-table "
+            "extraction) will be unavailable until this succeeds: %s\n%s",
+            exc, traceback.format_exc(),
+        )
+        return None
+
+
+PaddleOCR = _import_paddleocr()
 
 from app.config import get_settings
 
@@ -124,6 +132,8 @@ class PageOcrResult:
 
 
 _engine = None
+# No longer used to permanently latch a failure (see _get_engine's own docstring) - kept only
+# so existing tests that reference it directly keep working; always False now in practice.
 _engine_init_failed = False
 # The actual exception from the last failed construction attempt, if any - surfaced in
 # run_page_ocr's "not installed/available" error message below, since that generic message was
@@ -136,21 +146,21 @@ _engine_init_error: str | None = None
 
 
 def _get_engine():
-    """Module-level singleton, but NOT a permanent one on a construction failure (only on
-    PaddleOCR genuinely being unimportable - see below): confirmed in production that a
-    construction failure can be transient (e.g. a momentary memory-pressure spike from other
-    in-flight requests) rather than a permanent "this will never work" condition, so permanently
-    latching it the same way a real missing-dependency case does would wrongly keep OCR broken
-    for the rest of the process's life after one bad moment. Each call to this function after a
-    construction failure retries - construction itself is fast once model weights are already on
-    disk (baked into the Docker image - see Dockerfile), so this cost is small even if it keeps
+    """Module-level singleton, but nothing here is EVER treated as a permanent, un-retriable
+    failure - confirmed in production (twice: once for construction, once for the import
+    itself) that a failure at one point in time can be purely transient (startup-time resource
+    contention, a momentary memory-pressure spike from other in-flight requests) rather than a
+    real "this will never work" condition. Every call retries whatever last failed - both are
+    fast once the package is installed and model weights are already on disk (baked into the
+    Docker image - see Dockerfile), so this cost is small even on a deployment where it keeps
     failing."""
-    global _engine, _engine_init_failed, _engine_init_error
-    if _engine is not None or _engine_init_failed:
+    global PaddleOCR, _engine, _engine_init_failed, _engine_init_error
+    if _engine is not None:
         return _engine
     if PaddleOCR is None:
-        _engine_init_failed = True  # genuinely permanent: the module itself isn't installed
-        _engine_init_error = "paddleocr/paddlepaddle module not importable"
+        PaddleOCR = _import_paddleocr()
+    if PaddleOCR is None:
+        _engine_init_error = "paddleocr/paddlepaddle module not importable (see server logs)"
         return None
     settings = get_settings()
     try:
