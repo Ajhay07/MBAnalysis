@@ -15,6 +15,7 @@ fully offline with no network calls and no paid API.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import traceback
 from dataclasses import dataclass, field
@@ -22,6 +23,18 @@ from dataclasses import dataclass, field
 import numpy as np
 
 logger = logging.getLogger("app.services.paddle_ocr")
+
+# Must be set before paddle/paddleocr is ever imported (read once at Paddle's own C++ runtime
+# init, not reconfigurable afterward) - PaddlePaddle's default CPU allocator strategy is
+# "auto_growth", which grows its memory pool on demand but does NOT return freed blocks to the
+# OS, and some PaddlePaddle builds pre-reserve a large fraction of total system memory upfront
+# specifically to avoid later allocator overhead. On a memory-constrained host (confirmed:
+# Render's free 512MB tier), that upfront reservation alone can be enough to OOM-kill the whole
+# process before a single OCR call even runs. "naive_best_fit" allocates and frees per actual
+# use instead of holding a large pre-grown pool - slightly slower, but bounded by what's really
+# needed rather than by Paddle's own throughput-oriented default. Harmless to set on any other
+# host - this only changes how memory is MANAGED, never correctness.
+os.environ.setdefault("FLAGS_allocator_strategy", "naive_best_fit")
 
 # Guards every call into the shared PaddleOCR engine singleton (see _get_engine below).
 # FastAPI's sync endpoints run on a threadpool, and this app has (at least) two independent
@@ -169,6 +182,8 @@ def _get_engine():
             lang=settings.OCR_LANGUAGE,
             use_gpu=settings.OCR_USE_GPU,
             show_log=False,
+            cpu_threads=settings.OCR_CPU_THREADS,
+            rec_batch_num=settings.OCR_REC_BATCH_NUM,
         )
         _engine_init_error = None
     except Exception as exc:

@@ -53,6 +53,21 @@ class Settings(BaseSettings):
     # expected to arrive rotated). Disable on a memory-constrained host to shave some RAM; True
     # (PaddleOCR's own default) elsewhere costs nothing extra worth avoiding.
     OCR_USE_ANGLE_CLS: bool = True
+    # PaddleOCR's own default (cpu_threads=10) is tuned for throughput on a well-resourced
+    # machine, not this app's actual workload (one request at a time, no concurrent-OCR need) or
+    # a memory-constrained host - 10 CPU threads each allocate their own working buffers, real
+    # overhead for zero benefit here. NOTE: det_limit_side_len (the detector's internal resize
+    # cap) was ALSO tried as a memory lever here and reverted - confirmed via
+    # engineering_engine's own WO 9374 regression test that lowering it (960 -> 640) measurably
+    # hurt real detection accuracy on an actual drawing (an OD reading that the pipeline
+    # correctly extracted at 960 came back missing at 640) - unlike cpu_threads/rec_batch_num
+    # (pure performance/batching knobs), that one trades real accuracy for memory and is not
+    # safe to lower blindly.
+    OCR_CPU_THREADS: int = 2
+    # How many cropped text-line images the recognition model processes per batch - PaddleOCR's
+    # own default (6) trades memory for throughput; 2 keeps peak memory lower at a small
+    # throughput cost that doesn't matter for this app's one-request-at-a-time workload.
+    OCR_REC_BATCH_NUM: int = 2
     OCR_CONFIDENCE_THRESHOLD: float = 0.5
     # Deskew defaults off: the minAreaRect-based angle estimate is unreliable on sparse/
     # high-aspect-ratio text layouts (verified empirically - it can rotate otherwise-straight
