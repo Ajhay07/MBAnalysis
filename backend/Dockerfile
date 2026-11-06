@@ -38,6 +38,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Set HOME and create the PaddleOCR cache dir BEFORE installing/constructing PaddleOCR below -
+# it downloads its model weights to $HOME/.paddleocr (no dedicated cache-dir env var exists), so
+# this must already point at the right place when that download happens, not be set afterward.
+ENV HOME=/app
+RUN mkdir -p /app/.paddleocr /app/uploads
+
 COPY requirements.txt .
 
 # Install everything except paddleocr first (pip ignores the paddleocr line only if we
@@ -57,6 +63,15 @@ COPY requirements.txt .
 # (large, build-time-only or training-visualization-only, not needed to import or run
 # inference). If a future paddleocr/imgaug version needs something else at import time, the
 # self-check below will fail loudly with exactly which module is missing.
+#
+# The self-check CONSTRUCTS a PaddleOCR instance (not just imports the module) deliberately -
+# that's what actually triggers the ~100-200MB model-weight download, baking it into this image
+# layer so NO container ever downloads anything over the network at startup. Confirmed necessary
+# on a real deployment (Render's free tier): that runtime download raced against the platform's
+# own restart/spin-down behavior and left a corrupted half-downloaded model file, which then
+# made every subsequent request fail with "PaddleOCR is not installed/available" until the
+# container was rebuilt - a failure mode that disappears entirely once the weights are already
+# on disk before the container ever starts.
 RUN grep -v '^paddleocr==' requirements.txt > /tmp/requirements.base.txt \
     && pip install --no-cache-dir -r /tmp/requirements.base.txt \
     && pip install --no-cache-dir --no-deps paddleocr==2.7.3 \
@@ -65,20 +80,10 @@ RUN grep -v '^paddleocr==' requirements.txt > /tmp/requirements.base.txt \
     && python -c "\
 import numpy as np; \
 np.sctypes = np.sctypes if hasattr(np, 'sctypes') else {'int': [np.int8, np.int16, np.int32, np.int64], 'uint': [np.uint8, np.uint16, np.uint32, np.uint64], 'float': [np.float16, np.float32, np.float64], 'complex': [np.complex64, np.complex128], 'others': [bool, object, bytes, str, np.void]}; \
-from paddleocr import PaddleOCR"
+from paddleocr import PaddleOCR; \
+PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)"
 
 COPY . .
-
-# Writable cache/data dirs. PaddleOCR downloads model weights to $HOME/.paddleocr (it has no
-# dedicated cache-dir env var), so in production HOME, DATABASE_URL and UPLOAD_DIR are all
-# pointed at a mounted persistent volume via env vars set on the hosting platform (Railway's own
-# volume, or a Hugging Face Spaces persistent-storage mount - see README.hf-spaces.md) - these
-# defaults just ensure the container has somewhere writable without one (on a platform with NO
-# persistent volume at all, e.g. a free HF Space, this also means that directory's contents -
-# the SQLite DB and uploaded drawings - do not survive a restart/redeploy; this is a platform
-# storage limitation, not a bug here).
-ENV HOME=/app
-RUN mkdir -p /app/.paddleocr /app/uploads
 
 # Hugging Face Spaces runs Docker containers as a non-root user and will refuse to start one
 # that tries to run as root - Railway has no such requirement, so this is a no-op there (it
