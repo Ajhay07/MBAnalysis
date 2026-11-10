@@ -84,7 +84,14 @@ _ENGINEERING_STEEL_RE = re.compile(
     r"\b(?:A|IS)\s?\d{3,4}"
     r"(?:\s+[A-Z]\d{2,4})?"
     r"(?:\s*(?:TYP|GR|CL)\.?\s?[A-Z0-9.]+)?"
-    r"(?:\s*/\s*\d+(?:\.\d+)?)?",
+    r"(?:\s*/\s*\d+(?:\.\d+)?)?"
+    # A bare grade suffix with no TYP/GR/CL keyword before it ("IS 2062 E250 BR") and/or a
+    # parenthetical grade note ("A 240 TYP 304(SS 304)") - both real, common on MB's own
+    # drawings - were previously dropped entirely since neither matches the groups above.
+    # Purely additive (both optional): can only extend an already-found match, never change
+    # whether one is found at all, so every existing caller keeps working exactly as before.
+    r"(?:[ \t]+[A-Z]{1,4}\b)?"
+    r"(?:[ \t]*\([A-Z0-9 .]+\))?",
     re.IGNORECASE,
 )
 
@@ -335,19 +342,34 @@ def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple
         return {}
     material_label = min(material_label_candidates, key=lambda b: abs(b["bbox"][0] - desc_x0))
     mat_y0 = material_label["bbox"][1]
-    # The material "row": blocks starting at-or-below the MATERIAL label's own top edge, within
-    # a generous band (covers realistic wrapping depth) and left of the unrelated spec-
-    # parameters block that sits much further right on real MB drawings.
+    # Real per-item material values can sit either BELOW the MATERIAL label's own top edge
+    # (the layout this band originally assumed) or ABOVE it - MB's own drawings use both: a
+    # normal top-down table (header row first, data below) and a "bottom-up" one (header row
+    # LAST, item 1 directly above it - see the same note in
+    # app.services.bom_table_extractor._extract_row_based_bom_table). A one-directional-only
+    # band silently finds nothing real on the other style and, worse, can sweep in an unrelated
+    # block that happens to fall in its fixed window (confirmed on a real bottom-up drawing,
+    # WO 9347: searching only below MATERIAL's label pulled in the DRAWN/APPROVED sub-table's
+    # own "NAME"/"DT"/date cells instead of the real materials, which actually sit ABOVE it).
+    # Both directions are searched and SEPARATED BELOW per-item (never merged into one band),
+    # using the distance from mat_y0 as the tiebreak - the real column's data is always much
+    # closer to mat_y0 than an unrelated cluster the fixed-size window happens to also catch.
+    MATERIAL_BAND_PX = 150
     material_row_candidates = [
         b for b in blocks
         if b is not material_label
-        and mat_y0 - 10 <= b["bbox"][1] <= mat_y0 + 150
+        and mat_y0 - MATERIAL_BAND_PX <= b["bbox"][1] <= mat_y0 + MATERIAL_BAND_PX
         and b["bbox"][0] < 300
         and len(_pdf_block_text(b)) >= 3
     ]
 
-    results: dict[str, str] = {}
-    for description, qty_text in items:
+    # Resolved in a first pass, over every item, before any material matching - item blocks
+    # need to be excluded from the material-candidate pool below regardless of which item they
+    # belong to or what order items are processed in (a later item's own name block could
+    # otherwise still slip through as an earlier item's "material" match).
+    item_blocks: dict[str, dict] = {}
+    all_descriptions_norm = {norm(d) for d, _ in items if d}
+    for description, _qty_text in items:
         nd = norm(description)
         if not nd:
             continue
@@ -360,11 +382,40 @@ def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple
             b for b in blocks
             if len(norm(_pdf_block_text(b))) >= max(3, len(nd) * 0.6)
             and (nd in norm(_pdf_block_text(b)) or norm(_pdf_block_text(b)) in nd)
+            # Excludes a block that's EXACTLY another known item's own clean name (e.g.
+            # "FLANGE" is a real substring of "SLEEVE FLANGE", a different registered item,
+            # not an OCR merge artifact of FLANGE's own row) - confirmed on a real drawing
+            # (WO 9347) where this let one item's row steal another's already-correct name
+            # block just for being closer to the DESCRIPTION header in y. A genuine
+            # merged-row blob (name+material+qty squashed together) never exactly equals
+            # another item's bare name, so this never excludes a legitimate match.
+            and norm(_pdf_block_text(b)) not in (all_descriptions_norm - {nd})
         ]
         if not candidates:
             continue
-        candidates.sort(key=lambda b: abs(len(norm(_pdf_block_text(b))) - len(nd)))
-        item_block = candidates[0]
+        # A component name can legitimately appear twice on the same drawing - once as this
+        # table's own row, once as an unrelated label elsewhere (e.g. a "FLANGE" callout in a
+        # shipping-bar/detail note, confirmed on a real drawing, WO 9347) - and text-length
+        # proximity alone can't tell them apart when the decoy happens to be an exact bare
+        # match. The real row is always close in y to this table's own DESCRIPTION header
+        # (every column's data lives in the same tight cluster around it); an unrelated label
+        # elsewhere on the page sits much further away. Prefer that proximity FIRST, text-length
+        # closeness only to break a remaining tie among equally-plausible same-cluster blocks.
+        DESC_LABEL_Y_BAND = 200
+        near = [b for b in candidates if abs(b["bbox"][1] - desc_label["bbox"][1]) <= DESC_LABEL_Y_BAND]
+        candidates = near or candidates
+        candidates.sort(key=lambda b: (
+            abs(b["bbox"][1] - desc_label["bbox"][1]),
+            abs(len(norm(_pdf_block_text(b))) - len(nd)),
+        ))
+        item_blocks[description] = candidates[0]
+    item_block_ids = {id(b) for b in item_blocks.values()}
+
+    results: dict[str, str] = {}
+    for description, qty_text in items:
+        item_block = item_blocks.get(description)
+        if item_block is None:
+            continue
         raw = _pdf_block_text(item_block)
         residual = ""
         if len(raw) > len(description) + 3:
@@ -379,6 +430,15 @@ def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple
             if qty_text and residual.endswith(qty_text):
                 residual = residual[: -len(qty_text)]
             residual = residual.strip()
+            # The item's OWN BOM-row number ("3." for item 3) and/or a quantity digit can be
+            # left stuck directly against the material text with no separating space (e.g.
+            # "3.FLANGE2IS 2062 E250 BR" -> after stripping "FLANGE", residual is
+            # "3.2IS 2062 E250 BR" - the leading "3.2" isn't itself the quantity-at-the-end
+            # case handled above, and _ENGINEERING_STEEL_RE's own \b can't match "IS" right
+            # after a digit with no boundary between them). Stripped here by position (any
+            # leading run of digits/periods/whitespace), not pattern-matched against a known
+            # quantity, so it can never eat into a genuine leading material code.
+            residual = re.sub(r"^[\d.\s]+", "", residual)
         # A real material string on these drawings matches the same ASTM/IS designation pattern
         # _ENGINEERING_STEEL_RE already looks for elsewhere ("A 240...", "IS 2062..."). Anything
         # else means this "merged block" guess was actually a false positive - most often a
@@ -388,14 +448,36 @@ def _pdf_structural_materials(pdf_path: str, page_number: int, items: list[tuple
         # block as a merged description+material pair when it's really just the item's own full,
         # untruncated name ("M8 BOLT" left over after stripping "& NUT" - note this DOES contain
         # a digit, "8", so a bare digit check alone isn't enough). Falls through to the ordinary
-        # nearest-material-row-by-x lookup instead of accepting a bad guess.
-        if residual and _ENGINEERING_STEEL_RE.search(residual):
-            results[description] = residual
+        # nearest-material-row-by-x lookup instead of accepting a bad guess. Only the REGEX
+        # MATCH ITSELF is kept (not the whole residual) - any leftover junk after the material
+        # phrase (e.g. a trailing merged quantity digit the endswith-qty_text check above didn't
+        # catch, because it wasn't exactly at residual's own end before this stripping) is
+        # dropped along with it, same principle as the leading-digit strip just above.
+        match = _ENGINEERING_STEEL_RE.search(residual) if residual else None
+        if match:
+            results[description] = match.group(0).strip()
             continue
         item_x0 = item_block["bbox"][0]
-        best = min(material_row_candidates, key=lambda b: abs(b["bbox"][0] - item_x0), default=None)
+        # Widening material_row_candidates' search to both directions (above) means it can now
+        # also contain other items' own name blocks (e.g. "END PIPE2") when they happen to fall
+        # in the window - exclude every resolved item_block, not just this row's own, or an
+        # item with no real material block nearby could get a neighboring ITEM's NAME matched
+        # back to itself as its "material" (distance 0 to its own block always wins otherwise).
+        candidates_here = [b for b in material_row_candidates if id(b) not in item_block_ids]
+        best = min(candidates_here, key=lambda b: abs(b["bbox"][0] - item_x0), default=None)
         if best is not None:
-            results[description] = _pdf_block_text(best)
+            best_text = _pdf_block_text(best)
+            # Same clustering artifact as the merged-block case above can also land on an
+            # otherwise-separate material block - a trailing merged quantity digit with no
+            # space (confirmed on a real drawing, WO 9347: "IS 2062 E250 BR1" for a component
+            # whose real quantity is 1). Stripped by direct suffix match against this row's own
+            # already-known quantity text (never an arbitrary trailing digit, which could just
+            # as easily be the material's own, e.g. "...304" in "A 240 Gr. 304") - same
+            # principle as the trailing-qty strip in the merged-block path above, not the regex
+            # (whose \b can't see past a digit glued directly onto a letter with no space).
+            if qty_text and best_text.endswith(qty_text) and not best_text[:-len(qty_text)].rstrip().isdigit():
+                best_text = best_text[: -len(qty_text)].rstrip()
+            results[description] = best_text
     return results
 
 
@@ -633,6 +715,19 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
         if not description:
             # Nothing usable to show a reviewer - skip rather than persist a blank line.
             continue
+        material = row.material
+        # PaddleOCR occasionally merges an item's own name and its material callout into ONE
+        # detected text region instead of two (confirmed on a real drawing, WO 9347: "BELLOW
+        # (1ply x 0.5mm)A 240 TYP 304(SS 304)" came through as a single region) - when that
+        # happens the table extractor has nowhere to split them, so the whole blob lands in
+        # `description` and `material` stays empty. Recovered here using the same ASTM/IS
+        # designation pattern _parse_materials already uses elsewhere, rather than leaving a
+        # real, correctly-OCR'd material silently blank just because of how it got merged.
+        if not material:
+            m = _ENGINEERING_STEEL_RE.search(description)
+            if m:
+                material = re.sub(r"\s+", " ", m.group(0)).strip().rstrip(",.")
+                description = (description[: m.start()] + description[m.end():]).strip()
         qty_value: float | None = None
         qty_text = (row.qty or "").strip()
         qty_match = re.search(r"\d+(?:\.\d+)?", qty_text)
@@ -696,7 +791,7 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
             description=description,
             category="",  # left for classify_component() in the pipeline to assign
             quantity=qty_value if qty_value is not None else 1,
-            material=row.material,
+            material=material,
             dimensions=dimensions,
             make_buy="Review",
             confidence=max(0.5, min(0.85, row.confidence)) if row.confidence else 0.6,
