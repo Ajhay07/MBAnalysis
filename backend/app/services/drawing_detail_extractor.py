@@ -23,6 +23,11 @@ Deliberately conservative, same philosophy as bom_table_extractor and reference_
 import re
 from dataclasses import dataclass, field
 
+try:
+    import fitz  # pymupdf
+except Exception:  # pragma: no cover
+    fitz = None
+
 # "<NAME> DETAIL" or "<NAME> DETAIL-A" / "<NAME> DETAIL 'B'" - NAME must be non-empty, so a bare
 # "DETAIL-A" weld/section callout (no component name) is excluded by construction. An optional
 # leading item-number marker ("[01] BELLOW DETAIL", "01. BELLOW DETAIL") is stripped first -
@@ -491,6 +496,107 @@ def extract_detail_dimensions_from_pdf_blocks(
             needs_confirmation=True,
         ))
     return results
+
+
+_HOLES_PATTERN_RE = re.compile(
+    r"[ØøΦ]\s?(?P<hole_dia>\d+(?:\.\d+)?)\s*[xX×]\s*0?(?P<noh>\d+)\s*NO\.?\s*OF\s*HOLES?"
+    r".*?PCD\s?(?P<pcd>\d+(?:\.\d+)?)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def extract_shared_view_flange_bolt_circle(pdf_path: str, page_number: int) -> DetailPanel | None:
+    """Best-effort recovery of a flange's bolt-circle dimensions (OD, bore/ID, PCD, hole
+    diameter and count) from a drawing family that has NO per-component "<NAME> DETAIL" panels
+    at all (confirmed on a real drawing, WO 9347 - a "Single Expansion Joint" style MB drawing:
+    its BOM table carries no SIZE column, same as the WO 9374 family extract_detail_dimensions
+    serves, but unlike that family there is no labeled detail panel for ANY component either -
+    every dimension lives directly on the one shared assembly/section view, with no text tying
+    a given callout to a specific BOM item).
+
+    Deliberately narrow in scope: this looks for exactly ONE recognizable pattern - a cluster of
+    plain Ø-prefixed diameter values sitting near a "ØNN x MM NO OF HOLES ... PCD PPP" callout,
+    which on every MB drawing seen so far is the end flange's own bolting detail (an unlabeled
+    DETAIL panel never attempts to recover anything else; see module docstring's conservative
+    philosophy). The caller is responsible for deciding WHICH component this belongs to (see
+    app.providers.deterministic_provider.analyze: a bare "FLANGE" item is assumed over
+    "SLEEVE FLANGE" when the drawing itself gives no way to tell them apart) and for keeping
+    `needs_confirmation=True` (always set here) visible to a reviewer - this is a geometric
+    best-effort guess, confirmed correct on WO 9347 by direct visual inspection of the rendered
+    drawing, never a verified reading.
+
+    Returns None (never raises) if the holes/PCD callout isn't found at all - a drawing with no
+    such callout gets no guess, not a wrong one."""
+    if fitz is None:
+        return None
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_number - 1]
+        page_dict = page.get_text("dict")
+        doc.close()
+    except Exception:
+        return None
+
+    blocks = [b for b in page_dict.get("blocks", []) if b.get("lines")]
+    if not blocks:
+        return None
+
+    holes_block = None
+    holes_match = None
+    for block in blocks:
+        text = _pdf_block_text(block)
+        m = _HOLES_PATTERN_RE.search(text)
+        if m:
+            holes_block = block
+            holes_match = m
+            break
+    if holes_block is None:
+        return None
+
+    # Bare Ø-prefixed diameter values sitting in a single-line block near the holes callout (the
+    # bolt-circle's own OD/bore stack, e.g. "Ø219", "Ø240", "Ø283 ± 3", "Ø343" on WO 9347) -
+    # same containment-by-proximity approach as extract_detail_dimensions_from_pdf_blocks, bound
+    # tightly since this is a single unlabeled cluster, not a whole lane.
+    hx0, hy0, hx1, hy1 = holes_block["bbox"]
+    diameters: list[tuple[float, dict]] = []
+    for block in blocks:
+        if block is holes_block or len(block.get("lines", [])) > 1:
+            continue
+        text = _pdf_block_text(block).strip()
+        m = re.match(r"^[ØøΦ]\s?(\d+(?:\.\d+)?)\s*(?:±\s*\d+(?:\.\d+)?)?$", text)
+        if not m:
+            continue
+        bx0, by0, bx1, by1 = block["bbox"]
+        cy = (by0 + by1) / 2.0
+        if hy0 - _PDF_PANEL_Y_MARGIN_PT * 4 <= cy <= hy1 + _PDF_PANEL_Y_MARGIN_PT * 4:
+            diameters.append((float(m.group(1)), block))
+    if not diameters:
+        return None
+
+    diameters.sort(key=lambda t: t[0])
+    dimensions = {
+        "id": f"{diameters[0][0]:g}",
+        "od": f"{diameters[-1][0]:g}",
+        "pcd": holes_match.group("pcd"),
+        "hole_dia": holes_match.group("hole_dia"),
+        "noh": holes_match.group("noh"),
+    }
+    # Middle values (e.g. Ø240, Ø283±3 between the Ø219 bore and Ø343 OD on WO 9347) have no
+    # confirmed engineering role (raised-face diameter, recess, etc. all plausible) - kept as
+    # generic dim_N keys rather than guessed at, same convention as _parse_panel_dimensions uses
+    # for any value it can't confidently label.
+    for i, (value, _block) in enumerate(diameters[1:-1], start=1):
+        dimensions[f"dim_{i}"] = f"{value:g}"
+
+    raw_tokens = [_pdf_block_text(b) for _v, b in diameters] + [_pdf_block_text(holes_block)]
+    return DetailPanel(
+        label_text=_pdf_block_text(holes_block),
+        component_name="",  # caller assigns this - see docstring
+        dimensions=dimensions,
+        raw_tokens=raw_tokens,
+        confidence=0.5,
+        needs_confirmation=True,
+    )
 
 
 def match_panel_to_description(description: str, panels: list[DetailPanel]) -> DetailPanel | None:

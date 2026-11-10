@@ -35,6 +35,7 @@ from app.services.bom_table_extractor import extract_bom_table
 from app.services.drawing_detail_extractor import (
     extract_detail_dimensions,
     extract_detail_dimensions_from_pdf_blocks,
+    extract_shared_view_flange_bolt_circle,
     match_panel_to_description,
 )
 from app.services.paddle_ocr import OcrRegion, run_page_ocr
@@ -874,6 +875,40 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     better = better_materials.get(c.description)
                     if better:
                         c.material = better
+
+                # Fallback for a drawing family with NO per-component DETAIL panel at all
+                # (confirmed on a real drawing, WO 9347 - unlike WO 9374, this layout puts every
+                # dimension directly on the one shared assembly view with no text tying a callout
+                # to a specific BOM item). Only attempted when no named panel was already found
+                # (never second-guesses a drawing that DOES have real panels) and matched by
+                # EXACT description equality, never match_panel_to_description's ordinary
+                # substring matching - that would ALSO catch "SLEEVE FLANGE" here (confirmed:
+                # normalized "FLANGE" is a substring of normalized "SLEEVEFLANGE"), silently
+                # attaching the same flange's bolt-circle to a different, unrelated component.
+                # The drawing itself gives no way to tell a bolt-circle apart from either one
+                # when both "FLANGE" and "SLEEVE FLANGE" exist (see
+                # extract_shared_view_flange_bolt_circle's own docstring) - this never guesses
+                # between them, only ever a component whose name IS "FLANGE".
+                if not detail_panels and table.layout == "transposed":
+                    flange_panel = extract_shared_view_flange_bolt_circle(pdf_path, page_number)
+                    if flange_panel is not None:
+                        flange_component = next(
+                            (c for c in components if c.description.strip().upper() == "FLANGE"),
+                            None,
+                        )
+                        if flange_component is not None:
+                            flange_component.dimensions = {
+                                **flange_panel.dimensions, **flange_component.dimensions,
+                            }
+                            flange_component.is_assumption = True
+                            flange_component.assumption_text = (
+                                f"{flange_component.assumption_text} "
+                                "SIZE recovered from the drawing's shared bolt-circle detail "
+                                f"(raw tokens: {', '.join(flange_panel.raw_tokens)}) - this "
+                                "drawing has no per-component DETAIL panel, and the drawing "
+                                "itself does not label which BOM item this detail belongs to; "
+                                "confirm before use."
+                            ).strip()
 
                 # An item PaddleOCR's image-region pass never detected AT ALL (not a misread -
                 # confirmed on a real drawing: zero OCR regions anywhere in "M8 Bolt & Nut"'s own
