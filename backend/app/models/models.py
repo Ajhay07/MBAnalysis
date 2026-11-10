@@ -375,7 +375,10 @@ class IndentRule(Base):
     mtl_spec = Column(String, default="")  # printed in the MTL SPEC column, e.g. "Fillerwire"
     size_text = Column(String, default="")  # printed in the SIZE column, e.g. "ER 309 - dia2.4 x 1000"
     unit = Column(String, default="Pcs")
-    formula = Column(SAEnum(IndentRuleFormula), default=IndentRuleFormula.MANUAL_REQUIRED, nullable=False)
+    # Same values_callable requirement as Indent.status above - IndentRuleFormula's values
+    # ("fixed_qty"/"per_assembly"/"manual_required") don't match its member names.
+    formula = Column(SAEnum(IndentRuleFormula, values_callable=lambda e: [m.value for m in e]),
+                      default=IndentRuleFormula.MANUAL_REQUIRED, nullable=False)
     value = Column(Float, nullable=True)  # meaning depends on `formula`; null for MANUAL_REQUIRED
     notes = Column(Text, default="")
     active = Column(Boolean, default=True, nullable=False)
@@ -400,7 +403,12 @@ class Indent(Base):
     serial_no = Column(String, default="")
     indent_date = Column(String, default="")  # free-text as printed on the form (DD-MM-YY)
     assembly_quantity = Column(Float, nullable=False)
-    status = Column(SAEnum(IndentStatus), default=IndentStatus.DRAFT, nullable=False)
+    # Unlike this app's other enum columns, IndentStatus's values ("Draft"/"Approved"/"Rejected")
+    # don't match its member names (DRAFT/APPROVED/REJECTED) - the Postgres enum type created by
+    # the add_indent_tables migration only accepts those value strings, so values_callable is
+    # required here to make SQLAlchemy send .value instead of its default .name.
+    status = Column(SAEnum(IndentStatus, values_callable=lambda e: [m.value for m in e]),
+                     default=IndentStatus.DRAFT, nullable=False)
     created_by = Column(String, default="system")
     created_at = Column(DateTime, default=datetime.utcnow)
     approved_by = Column(String, nullable=True)
