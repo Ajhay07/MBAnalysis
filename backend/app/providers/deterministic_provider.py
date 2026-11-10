@@ -749,6 +749,18 @@ def _rows_to_components(rows, page_number: int, detail_panels=None) -> list[Comp
         # merge the panel's keys in (never overwriting a key the BOM table itself already gave),
         # not to replace or skip.
         panel = match_panel_to_description(description, detail_panels) if detail_panels else None
+        # Best-effort fallback: a panel named "COLLAR DETAIL" with no "COLLAR" BOM item anywhere
+        # on the sheet (confirmed on a real drawing, WO 9512) - visually a thin-wall tube weld
+        # detail matching SLEEVE's own profile, the only other BOM item left with no detail
+        # panel of its own. Never guessed at for any component OTHER than SLEEVE, and only when
+        # the normal name-match above found nothing - a drawing that actually HAS a "COLLAR" BOM
+        # item is never affected by this. Flagged the same way as every other panel match
+        # (needs_dimension_confirmation below), so the panel's own real name ("COLLAR DETAIL")
+        # stays visible in the assumption text for a reviewer to judge.
+        if panel is None and detail_panels and description.strip().upper() == "SLEEVE":
+            panel = next(
+                (p for p in detail_panels if p.component_name.strip().upper() == "COLLAR"), None
+            )
         if panel is not None and panel.dimensions:
             added_keys = [key for key in panel.dimensions if key not in dimensions]
             for key, value in panel.dimensions.items():

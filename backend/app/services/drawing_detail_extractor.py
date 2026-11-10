@@ -57,6 +57,15 @@ _ALL_LABEL_TOKENS = {alias: key for key, aliases in _DIM_LABEL_ALIASES.items() f
 _INLINE_LABELED_RE = re.compile(
     r"^(OD|ID|THK|TK|PCD|L)\s*[:\-]?\s*(\d+(?:\.\d+)?)$"
 )
+# A bellows wall-thickness callout, e.g. "2PLY x 0.5mm THK" / "1Ply x 0.5mmThk" - confirmed on
+# two separate real drawings (WO 9347, WO 9512) using this exact "<plies>PLY x <mm>mm THK"
+# phrasing (value-then-label, unlike _INLINE_LABELED_RE's label-then-value convention, so it
+# needs its own pattern). Self-identifying regardless of how far it sits from its own "<NAME>
+# DETAIL" label - see its use in _assign_to_panels/extract_detail_dimensions_from_pdf_blocks,
+# both of which exempt a match from the normal distance restriction for exactly this reason.
+_PLY_THK_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*PLY\s*[xX×]\s*(\d+(?:\.\d+)?)\s*MM\s*THK", re.IGNORECASE
+)
 # PaddleOCR has repeatedly been observed misreading the "Ø" diameter glyph as a bare digit "0"
 # (confirmed on two separate real drawings, WO-9347 and WO-9374: "Ø 219" -> "0 219", "Ø 559" ->
 # "0 559") - accepted alongside the real symbol. A bare leading "0" is only treated this way
@@ -243,6 +252,15 @@ def _parse_panel_dimensions(panel_regions: list) -> tuple[dict, list[str], float
             continue
         raw_tokens.append(text)
         confidences.append(getattr(region, "confidence", 0.0) or 0.0)
+
+        ply_thk = _PLY_THK_RE.search(text)
+        if ply_thk:
+            # group(1) is the ply count (not a dimension this schema has a key for - the mm
+            # value in group(2) is the actual wall Thk a reviewer/calc engine needs); never
+            # overwrites an already-set thk (a bare, closer-matched value should still win if
+            # one was found first).
+            dimensions.setdefault("thk", ply_thk.group(2))
+            continue
 
         inline = _INLINE_LABELED_RE.match(norm.replace(" ", ""))
         if inline:
@@ -458,9 +476,18 @@ def extract_detail_dimensions_from_pdf_blocks(
             continue
         cy = (y0 + y1) / 2.0
         cx = (x0 + x1) / 2.0
+        # A "<plies>PLY x <mm>mm THK" bellows wall-thickness callout is self-identifying
+        # regardless of how far it sits from its own label's Y-range - confirmed on a real
+        # drawing (WO 9512) where this exact text sits ~180pt away from its "BELLOW DETAIL"
+        # label (well outside the normal Y margin), so the ordinary containment check below
+        # would otherwise miss it entirely and let a nearby stray digit (a "[01]" item-number
+        # marker right next to the label) get mistaken for the real thickness instead. Still
+        # scoped to the label's own X lane (never skips the X-offset check) so it can't cross
+        # into a different panel's column.
+        is_ply_thk = _PLY_THK_RE.search(text) is not None
         containing = [
             (name, bbox, b) for name, bbox, b in labels
-            if bbox[1] - _PDF_PANEL_Y_MARGIN_PT <= cy <= bbox[3] + _PDF_PANEL_Y_MARGIN_PT
+            if (is_ply_thk or bbox[1] - _PDF_PANEL_Y_MARGIN_PT <= cy <= bbox[3] + _PDF_PANEL_Y_MARGIN_PT)
             and _PDF_PANEL_X_OFFSET_PT[0] <= cx - bbox[0] <= _PDF_PANEL_X_OFFSET_PT[1]
         ]
         if not containing:
