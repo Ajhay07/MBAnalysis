@@ -178,6 +178,23 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
         and r.text and r.text.strip()
         and _y_overlap(r.bbox, description_label.bbox) > 0
         and _x_center(r.bbox) > desc_x1
+        # Excludes a "<NAME> DETAIL" panel label (e.g. "COLLAR DETAIL") - confirmed on a real
+        # drawing (WO 9512) where one such label sat close enough to the item column's own x
+        # to pass _contiguous_x_run's dynamic gap check, becoming a bogus 7th "component" with
+        # no material or quantity of its own. A real BOM item name never ends in the word
+        # DETAIL on these drawings (see app.services.drawing_detail_extractor's own convention),
+        # so this can never exclude a genuine item.
+        and not _normalize(r.text or "").endswith("DETAIL")
+        # Excludes regions injected from the PDF's embedded text layer (see
+        # app.providers.deterministic_provider._embedded_text_numeric_regions, which sets
+        # confidence=1.0 as its own marker, never produced by real image OCR) - those exist
+        # only to supply QTY digits image OCR missed, never a component NAME. Confirmed on a
+        # real drawing (WO 9512) where a bare "6" from that source (the BOM table's own row-
+        # number column for item 6) landed inside the item column's x-range and became a bogus
+        # 7th "component" with no material of its own - which in turn made every OTHER already-
+        # correct material look suspect to the caller's "did OCR get everything?" check and
+        # re-triggered PDF-structural correction that didn't need to run at all.
+        and r.confidence != 1.0
     ]
     item_regions = _contiguous_x_run(item_candidates, desc_x1)
     if not item_regions:
@@ -308,7 +325,19 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
             # be genuinely separate, so it's left out of material matching altogether.
             and r.confidence != 1.0
         ]
-        material_values = _contiguous_x_run(material_value_candidates, desc_x1)
+        # Anchored to this run's OWN leftmost candidate, not desc_x1 - material values sit
+        # under/near the item columns themselves, not immediately right of the DESCRIPTION
+        # label (unlike item_candidates, which genuinely do start right after it). Using
+        # desc_x1 as the anchor made the very first real material value's gap from it a
+        # pass/fail coin-flip against the fixed 50px floor - confirmed directly on a real
+        # drawing (WO 9347) where that gap (57px) narrowly exceeded the cutoff and silently
+        # discarded the entire material run, leaving every component's material blank even
+        # though every value was correctly detected and positioned.
+        material_start_x = (
+            min(_x_span(r.bbox)[0] for r in material_value_candidates)
+            if material_value_candidates else desc_x1
+        )
+        material_values = _contiguous_x_run(material_value_candidates, material_start_x)
         # Concatenate every wrapped-line fragment assigned to the same item (not overwrite) -
         # reading order top-to-bottom so "A 240" + "TYP 304" joins as "A 240 TYP 304".
         material_parts_by_item: dict[int, list[tuple[float, str]]] = {}
@@ -333,7 +362,13 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
             and _y_overlap(r.bbox, qty_label.bbox) > 0
             and _x_center(r.bbox) > desc_x1
         ]
-        qty_values = _contiguous_x_run(qty_value_candidates, desc_x1)
+        # Same anchor fix as material_values above - qty values sit under the item columns,
+        # not right after the DESCRIPTION label.
+        qty_start_x = (
+            min(_x_span(r.bbox)[0] for r in qty_value_candidates)
+            if qty_value_candidates else desc_x1
+        )
+        qty_values = _contiguous_x_run(qty_value_candidates, qty_start_x)
         for value_region in qty_values:
             owner = _assign_to_item_column(value_region)
             if owner is None:

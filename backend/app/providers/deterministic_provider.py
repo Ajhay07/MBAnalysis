@@ -838,43 +838,68 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     "with enough confidence to become a component - add components manually."
                 )
             elif pdf_path and table.layout == "transposed":
-                # These PDF-structural correction passes are written specifically for the
-                # transposed (items-as-columns) layout's "nearest block by x" matching (see
-                # _pdf_structural_materials' own docstring) - every item there genuinely sits at
-                # a different x position, which is what that matching relies on. A normal
-                # row-based table (table.layout == "row") has every item at the SAME x position
-                # (just different rows), so that same "nearest by x" logic degenerates and
-                # mismatches nearby stray text (e.g. a title-block "NAME DT"/date column) to
-                # most rows instead - confirmed directly against a real drawing (WO 9347) where
-                # it was overwriting already-correct, column-aligned OCR material readings with
-                # garbage. Row-based tables' own row.material is already correctly aligned by
-                # the column-assignment in _extract_row_based_bom_table - it needs no correction.
+                # The description/material correction passes below (and the missing-item
+                # recovery further down) are only attempted when OCR-region matching left at
+                # least one component's material blank - confirmed on a real drawing (WO 9512)
+                # that running them unconditionally can actively make things WORSE when OCR
+                # already got every material right: PyMuPDF's own text-block clustering on that
+                # drawing merges a leading BOM-row index digit onto nearby text in ways image OCR
+                # doesn't (e.g. "5.SS 304"), and its fuzzy missing-item matching
+                # (_pdf_structural_missing_items) then treated those merge artifacts as
+                # components OCR never saw at all, adding bogus extra rows ("1", "5.SS 304")
+                # alongside the 6 real, already-correctly-read ones. OCR's own column-aligned
+                # reading is trusted first; this whole correction path exists specifically for
+                # WO 9347-style drawings where OCR itself found nothing to trust. The flange
+                # bolt-circle SIZE fallback just below is independent of this - it fills in data
+                # (SIZE) no other path ever provides, never overwrites something OCR already got
+                # right, so it always runs on this layout regardless of material completeness.
                 #
-                # Correct item descriptions FIRST (see _pdf_structural_item_descriptions - OCR
-                # misreads individual characters, e.g. "NUT & LOCKNUT" -> "JUT & LOCKNUT"), then
-                # look up materials using the now-corrected descriptions - a wrong description
-                # was also why those same rows' materials came back blank (the text-match in
-                # _pdf_structural_materials never found anything for the garbled name). Item
-                # IDENTITY (count/order) and quantity are left untouched; only the description
-                # text itself and material are ever replaced, and only when a lookup actually
-                # found something confident enough.
-                better_descriptions = _pdf_structural_item_descriptions(
-                    pdf_path, page_number, [c.description for c in components]
-                )
-                for c in components:
-                    corrected = better_descriptions.get(c.description)
-                    if corrected:
-                        c.description = corrected
+                # Captured ONCE, before either correction step runs (not re-checked after the
+                # description/material fix below, which would otherwise have already filled in
+                # every material by the time the missing-item check below ran, silently
+                # disabling that recovery for every drawing that DID need the first fix - the two
+                # are testing two different things: "did OCR read an item's material" vs. "did
+                # OCR even find this item at all").
+                needs_structural_correction = any(not c.material for c in components)
+                if needs_structural_correction:
+                    # These PDF-structural correction passes are written specifically for the
+                    # transposed (items-as-columns) layout's "nearest block by x" matching (see
+                    # _pdf_structural_materials' own docstring) - every item there genuinely sits
+                    # at a different x position, which is what that matching relies on. A normal
+                    # row-based table (table.layout == "row") has every item at the SAME x
+                    # position (just different rows), so that same "nearest by x" logic
+                    # degenerates and mismatches nearby stray text (e.g. a title-block "NAME DT"/
+                    # date column) to most rows instead - confirmed directly against a real
+                    # drawing (WO 9347) where it was overwriting already-correct, column-aligned
+                    # OCR material readings with garbage. Row-based tables' own row.material is
+                    # already correctly aligned by the column-assignment in
+                    # _extract_row_based_bom_table - it needs no correction.
+                    #
+                    # Correct item descriptions FIRST (see _pdf_structural_item_descriptions -
+                    # OCR misreads individual characters, e.g. "NUT & LOCKNUT" ->
+                    # "JUT & LOCKNUT"), then look up materials using the now-corrected
+                    # descriptions - a wrong description was also why those same rows' materials
+                    # came back blank (the text-match in _pdf_structural_materials never found
+                    # anything for the garbled name). Item IDENTITY (count/order) and quantity
+                    # are left untouched; only the description text itself and material are ever
+                    # replaced, and only when a lookup actually found something confident enough.
+                    better_descriptions = _pdf_structural_item_descriptions(
+                        pdf_path, page_number, [c.description for c in components]
+                    )
+                    for c in components:
+                        corrected = better_descriptions.get(c.description)
+                        if corrected:
+                            c.description = corrected
 
-                items = [
-                    (c.description, f"{c.quantity:g}" if c.quantity is not None else "")
-                    for c in components
-                ]
-                better_materials = _pdf_structural_materials(pdf_path, page_number, items)
-                for c in components:
-                    better = better_materials.get(c.description)
-                    if better:
-                        c.material = better
+                    items = [
+                        (c.description, f"{c.quantity:g}" if c.quantity is not None else "")
+                        for c in components
+                    ]
+                    better_materials = _pdf_structural_materials(pdf_path, page_number, items)
+                    for c in components:
+                        better = better_materials.get(c.description)
+                        if better:
+                            c.material = better
 
                 # Fallback for a drawing family with NO per-component DETAIL panel at all
                 # (confirmed on a real drawing, WO 9347 - unlike WO 9374, this layout puts every
@@ -910,65 +935,69 @@ class DeterministicProvider(DrawingAnalysisProvider):
                                 "confirm before use."
                             ).strip()
 
-                # An item PaddleOCR's image-region pass never detected AT ALL (not a misread -
-                # confirmed on a real drawing: zero OCR regions anywhere in "M8 Bolt & Nut"'s own
-                # column) would otherwise be silently absent from the BOM entirely, with no sign
-                # anything was missing. Synthesized from the PDF's own embedded text instead of
-                # being dropped - quantity is genuinely unknown for a row OCR never saw at all
-                # (no region to read a QTY digit from), so it's explicitly flagged rather than
-                # guessed, same "never fabricate, always flag" convention as every other
-                # assumption this pipeline makes.
-                missing_items = _pdf_structural_missing_items(
-                    pdf_path, page_number, [c.description for c in components]
-                )
-                missing_quantities = _pdf_structural_quantities(pdf_path, page_number, missing_items)
-                for missing_description in missing_items:
-                    missing_material = _pdf_structural_materials(
-                        pdf_path, page_number, [(missing_description, "")]
-                    ).get(missing_description, "")
-                    real_quantity = missing_quantities.get(missing_description)
-                    if real_quantity is not None:
-                        components.append(ComponentCandidate(
-                            description=missing_description,
-                            material=missing_material,
-                            quantity=real_quantity,
-                            make_buy="Review",
-                            confidence=0.5,
-                            verification_status="Unverified",
-                            source_page=page_number,
-                            source_text=missing_description,
-                            quantity_basis="structural_pdf_text",
-                            component_type="purchased",
-                            is_assumption=True,
-                            assumption_text=(
-                                "This row was never detected by image OCR at all (confirmed: no "
-                                "text region anywhere in its column) - recovered from the PDF's "
-                                "own embedded text layer instead of being silently dropped, "
-                                "including its quantity from the same QTY row. Confirm it is "
-                                "correct before this is used."
-                            ),
-                        ))
-                    else:
-                        components.append(ComponentCandidate(
-                            description=missing_description,
-                            material=missing_material,
-                            quantity=1,
-                            make_buy="Review",
-                            confidence=0.5,
-                            verification_status="Unverified",
-                            source_page=page_number,
-                            source_text=missing_description,
-                            quantity_basis="assumed",
-                            component_type="purchased",
-                            is_assumption=True,
-                            assumption_text=(
-                                "This row was never detected by image OCR at all (confirmed: no "
-                                "text region anywhere in its column) - recovered from the PDF's own "
-                                "embedded text layer instead of being silently dropped. Quantity "
-                                "could not be read from anywhere and defaults to 1 - confirm the "
-                                "real quantity before this is used."
-                            ),
-                        ))
+                if needs_structural_correction:
+                    # An item PaddleOCR's image-region pass never detected AT ALL (not a misread
+                    # - confirmed on a real drawing: zero OCR regions anywhere in "M8 Bolt & Nut"'s
+                    # own column) would otherwise be silently absent from the BOM entirely, with
+                    # no sign anything was missing. Synthesized from the PDF's own embedded text
+                    # instead of being dropped - quantity is genuinely unknown for a row OCR never
+                    # saw at all (no region to read a QTY digit from), so it's explicitly flagged
+                    # rather than guessed, same "never fabricate, always flag" convention as every
+                    # other assumption this pipeline makes. Gated behind the same "OCR left a
+                    # material blank" check as the correction pass above, for the same reason
+                    # (WO 9512: this fuzzy matching invented bogus extra components from PyMuPDF's
+                    # own merge artifacts when every real component had already been found).
+                    missing_items = _pdf_structural_missing_items(
+                        pdf_path, page_number, [c.description for c in components]
+                    )
+                    missing_quantities = _pdf_structural_quantities(pdf_path, page_number, missing_items)
+                    for missing_description in missing_items:
+                        missing_material = _pdf_structural_materials(
+                            pdf_path, page_number, [(missing_description, "")]
+                        ).get(missing_description, "")
+                        real_quantity = missing_quantities.get(missing_description)
+                        if real_quantity is not None:
+                            components.append(ComponentCandidate(
+                                description=missing_description,
+                                material=missing_material,
+                                quantity=real_quantity,
+                                make_buy="Review",
+                                confidence=0.5,
+                                verification_status="Unverified",
+                                source_page=page_number,
+                                source_text=missing_description,
+                                quantity_basis="structural_pdf_text",
+                                component_type="purchased",
+                                is_assumption=True,
+                                assumption_text=(
+                                    "This row was never detected by image OCR at all (confirmed: no "
+                                    "text region anywhere in its column) - recovered from the PDF's "
+                                    "own embedded text layer instead of being silently dropped, "
+                                    "including its quantity from the same QTY row. Confirm it is "
+                                    "correct before this is used."
+                                ),
+                            ))
+                        else:
+                            components.append(ComponentCandidate(
+                                description=missing_description,
+                                material=missing_material,
+                                quantity=1,
+                                make_buy="Review",
+                                confidence=0.5,
+                                verification_status="Unverified",
+                                source_page=page_number,
+                                source_text=missing_description,
+                                quantity_basis="assumed",
+                                component_type="purchased",
+                                is_assumption=True,
+                                assumption_text=(
+                                    "This row was never detected by image OCR at all (confirmed: no "
+                                    "text region anywhere in its column) - recovered from the PDF's own "
+                                    "embedded text layer instead of being silently dropped. Quantity "
+                                    "could not be read from anywhere and defaults to 1 - confirm the "
+                                    "real quantity before this is used."
+                                ),
+                            ))
         else:
             ambiguities.append(Ambiguity(
                 description=(
