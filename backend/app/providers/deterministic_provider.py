@@ -741,7 +741,19 @@ class DeterministicProvider(DrawingAnalysisProvider):
                     "A BOM-table-like header row was found, but no body row could be read "
                     "with enough confidence to become a component - add components manually."
                 )
-            elif pdf_path:
+            elif pdf_path and table.layout == "transposed":
+                # These PDF-structural correction passes are written specifically for the
+                # transposed (items-as-columns) layout's "nearest block by x" matching (see
+                # _pdf_structural_materials' own docstring) - every item there genuinely sits at
+                # a different x position, which is what that matching relies on. A normal
+                # row-based table (table.layout == "row") has every item at the SAME x position
+                # (just different rows), so that same "nearest by x" logic degenerates and
+                # mismatches nearby stray text (e.g. a title-block "NAME DT"/date column) to
+                # most rows instead - confirmed directly against a real drawing (WO 9347) where
+                # it was overwriting already-correct, column-aligned OCR material readings with
+                # garbage. Row-based tables' own row.material is already correctly aligned by
+                # the column-assignment in _extract_row_based_bom_table - it needs no correction.
+                #
                 # Correct item descriptions FIRST (see _pdf_structural_item_descriptions - OCR
                 # misreads individual characters, e.g. "NUT & LOCKNUT" -> "JUT & LOCKNUT"), then
                 # look up materials using the now-corrected descriptions - a wrong description

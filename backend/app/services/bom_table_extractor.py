@@ -56,6 +56,13 @@ class BomRow:
 class BomTableExtraction:
     header_columns: list[str] = field(default_factory=list)
     rows: list[BomRow] = field(default_factory=list)
+    # "row" (normal header-row-plus-item-rows layout, where each row's own material cell is
+    # already correctly column-aligned by OCR) or "transposed" (items-as-columns layout - see
+    # _extract_transposed_bom_table). app.providers.deterministic_provider uses this to decide
+    # whether the PDF-structural material/description correction passes are even applicable:
+    # those are written specifically for the transposed layout's "nearest block by x" matching,
+    # which only makes sense when items vary by x position in the first place.
+    layout: str = "row"
 
 
 def _normalize(text: str) -> str:
@@ -351,7 +358,8 @@ def _extract_transposed_bom_table(regions) -> BomTableExtraction | None:
         )
         for item in item_regions
     ]
-    return BomTableExtraction(header_columns=["description", "material", "qty"], rows=rows)
+    return BomTableExtraction(header_columns=["description", "material", "qty"], rows=rows,
+                               layout="transposed")
 
 
 def extract_bom_table(regions) -> BomTableExtraction | None:
