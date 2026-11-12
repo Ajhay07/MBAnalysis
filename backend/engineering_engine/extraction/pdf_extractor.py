@@ -35,6 +35,13 @@ class RawComponentEvidence:
     dimension_sources: dict = field(default_factory=dict)  # same keys -> "ocr_detail_panel" | "bom_table"
     detail_panel_label: str = ""         # e.g. "SLEEVE DETAIL" - which CAD view this came from
     raw_tokens: list = field(default_factory=list)       # full panel text, for REVIEW_REQUIRED context
+    cad_confidence: str = ""             # "high" | "low" | "none" | "" (no CAD geometry available) -
+                                          # set by cad_extractor.py, never implies anything about
+                                          # dimension_sources (CAD geometry doesn't assign od/thk/l
+                                          # semantics today - see cad_extractor.py)
+    cad_raw_tokens: list = field(default_factory=list)   # text found near the label by CAD geometry
+                                          # clustering, kept separate from raw_tokens (OCR panel text)
+                                          # so the two sources are never conflated
 
 
 def _rasterize_page(pdf_path: str, page_number: int = 1, dpi: int = 200):
